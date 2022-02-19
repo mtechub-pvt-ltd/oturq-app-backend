@@ -25,10 +25,10 @@ app.use(cors())
 // }))
 
 
-
 app.use('/driverPics', express.static('driverPics'));
 app.use('/customerPics', express.static('customerPics'));
 app.use('/ordersPics', express.static('ordersPics'));
+
 
 app.use(express.json())
 

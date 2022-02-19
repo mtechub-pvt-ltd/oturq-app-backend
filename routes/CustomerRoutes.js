@@ -6,6 +6,7 @@ const {
      updateUserStatus,
     updateCustomer,
     updateCustLocation,
+    updateCustomerLocation,
 } = require('../controllers/CustomerController')
 const multer = require("multer")
 var storage = multer.diskStorage({
@@ -28,10 +29,13 @@ router.post('/api/customer/register', addNewUser)
 router.post('/api/customer/signin', LogInUser)
 
 // Upadte verification Stataus
-router.put('/api/customer/changeStatus/:id', updateUserStatus);
+router.put('/api/customer/changeVerifyStatus/:id', updateUserStatus);
 
 // Update user info
-router.put('/api/customer/updateInfo/:id', upload.single("profilePic"), updateCustomer);
+router.put('/api/customer/updateProfile/:id', upload.single("profilePic"), updateCustomer);
+
+// Update user location
+router.put('/api/customer/updateLocation/:id', updateCustomerLocation);
 
 // Update user location
 router.put('/api/customer/updateLocation/:id', updateCustLocation);

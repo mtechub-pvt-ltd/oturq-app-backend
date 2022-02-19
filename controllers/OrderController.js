@@ -42,15 +42,20 @@ const addNewOrder = async (req, res) => {
         // calculating difernce between locations
         //const distabceBtTwoPoints = calcCrow(pickUpLoc[0], pickUpLoc[1], dropLoc[0], dropLoc[1]);
 
+        for (let i = 0; i !== req.files.length; i++) {
+            var lower = req.files[i].filename.toLowerCase();
+            req.body.images = []
+            req.body.images.push(lower);
+        }
+
         const newOrder = new Orders({ ...req.body })
         try {
             const addedOrder = await newOrder.save();
             var id = addedOrder._id.toString()
-            console.log("id : ", id)
 
             // sending request to online drivers in 10 km radius
             let check = await sendDriverNotifications(pickUpLoc[0], pickUpLoc[1], id)
-            console.log("check : " , check , "added Order : ", addedOrder)
+
             if (check !== "Done") {
                 return res.status(504).json({success: false,  message: 'Request Not Sent to Drivers' })
             }
@@ -274,6 +279,7 @@ const orderAcceptByDriver = async (req,res) => {
             gotDriver.pendingOrders.push(id)
             await Drivers.findByIdAndUpdate(driverId ,{ $set : gotDriver }  , {new: true} )
 
+
             return res.status(201).json({
                 success: true,
                 message : "Order has Been Started"
@@ -284,6 +290,148 @@ const orderAcceptByDriver = async (req,res) => {
             return res.status(201).json({
                 success: false,
                 message: 'Could Not get Responses'
+            })
+        }
+    }
+
+}
+
+//  Change order status time by time
+const changeOrderStatus = async (req,res) => {
+    const {id , driverId} = req.params;
+    const {orderStatus} = req.body;
+
+    if (!id || !driverId || !orderStatus) {
+        return res.status(403).json({
+            success: false,
+            message: 'Please Provide All Required Credientials'
+        })
+    }else{
+        try {
+            let gotDriver = await Drivers.findById(driverId);
+            if (!gotDriver) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Driver Not Found'
+                })
+            }
+
+            const gotOrder = await Orders.findOne({_id : id , recieverId : driverId});
+            if (!gotOrder) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Order Not Found'
+                })
+            }
+
+            if(gotOrder.status === false){
+                return res.status(201).json({
+                    success: false,
+                    message: 'Order has Not Started Yet'
+                })
+            }
+
+            gotOrder.orderStatus = orderStatus;
+            await Orders.findByIdAndUpdate(id ,{ $set : gotOrder }  , {new: true} )
+
+            return res.status(201).json({
+                success: true,
+                message : "Order Status Changed"
+            })
+
+        }catch (e) {
+            console.log("Errr in changeOrderStatus and error  is : ", e.message);
+            return res.status(201).json({
+                success: false,
+                message: 'Could Not Update Status'
+            })
+        }
+    }
+
+}
+
+// Order Completed By driver
+const orderCompletedByDriver = async (req,res) => {
+    const {id , driverId} = req.params;
+
+     // checking if sent files are of image type or not
+     if (!req.file) {
+        return res.json({
+            success: false,
+            message: "Reaching Reciept is necessary for order completion"
+        });
+     }
+
+    // checking if sent files are of image type or not
+    if (req.file) {
+        if ((req.file.mimetype !== "image/jpeg" && req.file.mimetype !== "image/jpg" && req.file.mimetype !== "image/webP" && req.file.mimetype !== "image/png")) {
+            return res.json({
+                success: false,
+                message: "Image Not Found"
+            });
+        }
+    }
+
+
+    if (!id || !driverId || !req.file) {
+        return res.status(403).json({
+            success: false,
+            message: 'Please Provide All Required Credientials'
+        })
+    }else{
+        try {
+            let gotDriver = await Drivers.findById(driverId);
+            if (!gotDriver) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Driver Not Found'
+                })
+            }
+
+            const gotOrder = await Orders.findOne({_id : id , recieverId : driverId});
+            if (!gotOrder) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Order Not Found'
+                })
+            }
+
+            if (gotOrder.orderStatus == "Completed"){
+                return res.status(404).json({
+                    success: false,
+                    message: 'order has already been completed'
+                })
+            }
+
+            if(gotOrder.status === false){
+                return res.status(201).json({
+                    success: false,
+                    message: 'Order has Not Started Yet'
+                })
+            }
+
+            if (req.file) {
+                var lower = req.file.filename.toLowerCase();
+                gotOrder.orderRecieptPic = lower;
+            }
+            gotOrder.confrimOrderReachedByDriver = true;
+            gotOrder.orderStatus = "Completed";
+            await Orders.findByIdAndUpdate(id ,{ $set : gotOrder }  , {new: true} )
+
+
+            gotDriver.completedOrders.push(id)
+            await Drivers.findByIdAndUpdate(id ,{ $set : gotDriver }  , {new: true} )
+
+            return res.status(201).json({
+                success: true,
+                message : "Order has been Reached SuccessFully"
+            })
+
+        }catch (e) {
+            console.log("Errr in orderCompletedByDriver and error  is : ", e.message);
+            return res.status(201).json({
+                success: false,
+                message: 'Could Not Update Status'
             })
         }
     }
@@ -313,5 +461,7 @@ module.exports = {
     addDriversReponses,
     getDriversReponses,
     acceptDriverRequest,
-    orderAcceptByDriver
+    orderAcceptByDriver,
+    changeOrderStatus,
+    orderCompletedByDriver
 }

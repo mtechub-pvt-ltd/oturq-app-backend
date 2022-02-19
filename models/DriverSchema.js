@@ -5,10 +5,6 @@ const DriverSchema = new mongoose.Schema({
         type: Number,
         required: true,
     },
-    codeRecieved: {
-        type: Number,
-        //required: true,
-    },
     verifyStatus: {
         type: Boolean,
         default: false
@@ -76,19 +72,19 @@ const DriverSchema = new mongoose.Schema({
     },
     documnetsDetails: {  // all images
         _id : false,
-        idCardFrontPic: {
+        idcardfromfront: {
             type: String,
             default: ''
         },
-        idCardBackPic: {
+        idcardfromback: {
             type: String,
             default: ''
         },
-        lisencePic: {
+        driversLisence: {
             type: String,
             default: ''
         },
-        ownershipPic: {
+        vehicleownership: {
             type: String,
             default: ''
         },
@@ -132,16 +128,6 @@ const DriverSchema = new mongoose.Schema({
     rating: {
         type: Number,
     },
-    // curntLoc: { // whenever user signs in his current location is setted in his acc.
-    //     type: {
-    //         type: String,
-    //         default: "Point",
-    //     },
-    //     coordinates: {
-    //         type: [Number], //the type is an array of numbers
-    //         //index: "2dsphere"
-    //     }
-    // },
     curntLoc: { // location of driver
         type: Array
     },

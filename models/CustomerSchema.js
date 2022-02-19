@@ -14,7 +14,7 @@ const CustomerSchema = new mongoose.Schema({
         //required: true,
         default : false
     },
-    fullname: {
+    firstname: {
         type: String,
         default : ''
     },
@@ -37,16 +37,6 @@ const CustomerSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
-    // curntLoc: { // whenever user signs in his current location is setted in his acc.
-    //     type: {
-    //         type: String,
-    //         default: "Point",
-    //     },
-    //     coordinates: {
-    //         type: [Number], //the type is an array of numbers
-    //         //index: "2dsphere"
-    //     }
-    // },
     curntLoc: { // location of user
         type: Array
     },

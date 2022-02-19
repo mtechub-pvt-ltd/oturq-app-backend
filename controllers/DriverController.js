@@ -163,33 +163,9 @@ const updateUserStatus = async (req, res) => {
     }
 }
 
-// uodate Driver Info Only not profile
+// uodate Driver Documents only
 const updateDriver = async (req, res) => {
     const {id} = req.params
-    const {
-        name,
-        familyName,
-        whatsAppNo,
-        gender,
-        address,
-        vehicleType,
-        plateNo,
-        plateCode,
-        yearOfManuf,
-        companyOfManuf,
-        vehicleColor,
-        bankName,
-        accountNo,
-        acctHolderName,
-    } = req.body
-
-    // checking if user has sent any data for updating or not
-    if ((Object.keys(req.body).length === 0) && (!req.files)) {
-        return res.status(201).json({
-            success: false,
-            message: 'You have not sent any Data for Updation'
-        })
-    }
 
     // checking if there are any files recieved
     if(!req.files && !req.file){
@@ -200,7 +176,7 @@ const updateDriver = async (req, res) => {
     }
 
     // checking if any image is remaining or not
-    if (!req.files.idCardFrontPic || !req.files.idCardBackPic || !req.files.lisencePic || !req.files.ownershipPic){
+    if (!req.files.idcardfromfront || !req.files.idcardfromback || !req.files.driversLisence || !req.files.vehicleownership){
         return res.json({
             success: false,
             message: "Some Documents Image Not Found"
@@ -218,7 +194,7 @@ const updateDriver = async (req, res) => {
         }
 
         // checking id card front image
-        if ((req.files.idCardFrontPic[0].mimetype !== "image/jpeg" && req.files.idCardFrontPic[0].mimetype !== "image/jpg" && req.files.idCardFrontPic[0].mimetype !== "image/webP" && req.files.idCardFrontPic[0].mimetype !== "image/png")) {
+        if ((req.files.idcardfromfront[0].mimetype !== "image/jpeg" && req.files.idcardfromfront[0].mimetype !== "image/jpg" && req.files.idcardfromfront[0].mimetype !== "image/webP" && req.files.idcardfromfront[0].mimetype !== "image/png")) {
             return res.json({
                 success: false,
                 message: "Id Card Front Image Not Found"
@@ -226,7 +202,7 @@ const updateDriver = async (req, res) => {
         }
 
         // checking id card back image
-        if ((req.files.idCardBackPic[0].mimetype !== "image/jpeg" && req.files.idCardBackPic[0].mimetype !== "image/jpg" && req.files.idCardBackPic[0].mimetype !== "image/webP" && req.files.idCardBackPic[0].mimetype !== "image/png")) {
+        if ((req.files.idcardfromback[0].mimetype !== "image/jpeg" && req.files.idcardfromback[0].mimetype !== "image/jpg" && req.files.idcardfromback[0].mimetype !== "image/webP" && req.files.idcardfromback[0].mimetype !== "image/png")) {
             return res.json({
                 success: false,
                 message: "Id Card Back Image Not Found"
@@ -234,7 +210,7 @@ const updateDriver = async (req, res) => {
         }
 
         // checking Lisence image
-        if ((req.files.lisencePic[0].mimetype !== "image/jpeg" && req.files.lisencePic[0].mimetype !== "image/jpg" && req.files.lisencePic[0].mimetype !== "image/webP" && req.files.lisencePic[0].mimetype !== "image/png")) {
+        if ((req.files.driversLisence[0].mimetype !== "image/jpeg" && req.files.driversLisence[0].mimetype !== "image/jpg" && req.files.driversLisence[0].mimetype !== "image/webP" && req.files.driversLisence[0].mimetype !== "image/png")) {
             return res.json({
                 success: false,
                 message: "Lisence Image Not Found"
@@ -242,7 +218,7 @@ const updateDriver = async (req, res) => {
         }
 
         // checking OwnerShip image
-        if ((req.files.ownershipPic[0].mimetype !== "image/jpeg" && req.files.ownershipPic[0].mimetype !== "image/jpg" && req.files.ownershipPic[0].mimetype !== "image/webP" && req.files.ownershipPic[0].mimetype !== "image/png")) {
+        if ((req.files.vehicleownership[0].mimetype !== "image/jpeg" && req.files.vehicleownership[0].mimetype !== "image/jpg" && req.files.vehicleownership[0].mimetype !== "image/webP" && req.files.vehicleownership[0].mimetype !== "image/png")) {
             return res.json({
                 success: false,
                 message: "OwnerShip Image Not Found"
@@ -251,7 +227,80 @@ const updateDriver = async (req, res) => {
     }
 
 
-    if (!id || !name || !familyName || !whatsAppNo || !gender || !address || !vehicleType || !plateNo || !plateCode || !yearOfManuf || !companyOfManuf || !vehicleColor || !bankName || !accountNo || !acctHolderName) {
+    if (!id ) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        const isExist = await Drivers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+                // uploading user profile iamge to multer
+                if (req.files) {
+                    let documnetsDetails = {};
+                    documnetsDetails.idcardfromfront = req.files.idcardfromfront[0].filename.toLowerCase()
+                    documnetsDetails.idcardfromback = req.files.idcardfromback[0].filename.toLowerCase()
+                    documnetsDetails.driversLisence = req.files.driversLisence[0].filename.toLowerCase()
+                    documnetsDetails.vehicleownership = req.files.vehicleownership[0].filename.toLowerCase()
+
+                    // sending data to array of vehicles
+                    req.body.documnetsDetails = {};
+                    req.body.documnetsDetails = documnetsDetails;
+
+                    // updating profile pic
+                    req.body.profilePic = "";
+                    req.body.profilePic = req.files.profilePic[0].filename.toLowerCase()
+                }
+
+                const updatedUser = await Drivers.findByIdAndUpdate(id, {
+                    $set: req.body
+                }, {
+                    new: true
+                })
+                res.status(201).json({
+                    success: true,
+                })
+
+            } catch (error) {
+                console.log("Error in updateDriver and error is : ", error)
+                return res.status(504).json({
+                    message: '!!! Opps An Error Occured !!!',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+
+// uodate Driver Info Only not profile
+const updateDriverDetails = async (req, res) => {
+    const {id} = req.params
+    const {
+        name,
+        familyName,
+        whatsAppNo,
+        gender,
+        address,
+    } = req.body
+
+    // checking if user has sent any data for updating or not
+    if ((Object.keys(req.body).length === 0)) {
+        return res.status(201).json({
+            success: false,
+            message: 'You have not sent any Data for Updation'
+        })
+    }
+
+    
+
+    if (!id || !name || !familyName || !whatsAppNo || !gender || !address ) {
         return res.status(504).json({
             success: false,
             message: 'Id is Required for Updation'
@@ -274,6 +323,246 @@ const updateDriver = async (req, res) => {
                     })
                 }
 
+                const updatedUser = await Drivers.findByIdAndUpdate(id, {
+                    $set: req.body
+                }, {
+                    new: true
+                })
+                res.status(201).json({
+                    success: true,
+                })
+
+            } catch (error) {
+                console.log("Error in updateDriver and error is : ", error)
+                return res.status(504).json({
+                    message: '!!! Opps An Error Occured !!!',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// get driver personel details
+const getDriverPersonelDetails = async (req, res) => {
+    const {
+        id
+    } = req.params
+
+    if (!id) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        const isExist = await Drivers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+                // checking if name is available or not
+                const checkIsExist = await Drivers.findById(id , {name : 1 , familyName : 1 , gender : 1 , address : 1 , whatsAppNo : 1 , _id : 0})
+                if (!checkIsExist) {
+                    return res.status(201).json({
+                        success: false,
+                        message: 'No User Found'
+                    })
+                }
+
+                res.status(201).json({
+                    success: true,
+                    checkIsExist
+                })
+
+            } catch (error) {
+                console.log("Error in updateDriver and error is : ", error)
+                return res.status(504).json({
+                    message: 'Opps An Error Occured',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// get driver vehicles details
+const getDriverVehiclesDetails = async (req, res) => {
+    const {
+        id
+    } = req.params
+
+    if (!id) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        const isExist = await Drivers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+                // checking if name is available or not
+                const checkIsExist = await Drivers.findById(id , {vehicleDetails : 1 , _id : 0 })
+                if (!checkIsExist) {
+                    return res.status(201).json({
+                        success: false,
+                        message: 'No User Found'
+                    })
+                }
+
+                res.status(201).json({
+                    success: true,
+                    checkIsExist
+                })
+
+            } catch (error) {
+                console.log("Error in updateDriver and error is : ", error)
+                return res.status(504).json({
+                    message: 'Opps An Error Occured',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// get driver single vehicles detail
+const getDriverSingleVehicleDetails = async (req, res) => {
+    const {
+        id
+    } = req.params
+    const {vehicleId} = req.body
+
+    if (!id) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        const isExist = await Drivers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+                // checking if name is available or not
+                const checkIsExist = await Drivers.findOne({_id : id , "vehicleDetails._id" : vehicleId } , {vehicleDetails : 1 , _id : 0 })
+                if (!checkIsExist) {
+                    return res.status(201).json({
+                        success: false,
+                        message: 'Not Found'
+                    })
+                }
+
+                res.status(201).json({
+                    success: true,
+                    checkIsExist
+                })
+
+            } catch (error) {
+                console.log("Error in updateDriver and error is : ", error)
+                return res.status(504).json({
+                    message: 'Opps An Error Occured',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// edit driver single vehicles detail
+const editSingleVehicleDetails = async (req, res) => {
+    const {
+        id
+    } = req.params
+    const {vehicleId} = req.body
+
+    if (!id) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        const isExist = await Drivers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+                // checking if name is available or not
+                let checkIsExist = await Drivers.findOne({_id : id , "vehicleDetails._id" : vehicleId } , {vehicleDetails : 1 , _id : 0 })
+                if (!checkIsExist) {
+                    return res.status(201).json({
+                        success: false,
+                        message: 'Not Found'
+                    })
+                }
+                
+                await Drivers.findOneAndUpdate({_id : id , "vehicleDetails._id" : vehicleId } ,{$set : {}}, {});
+
+                res.status(201).json({
+                    success: true,
+                    checkIsExist
+                })
+
+            } catch (error) {
+                console.log("Error in updateDriver and error is : ", error)
+                return res.status(504).json({
+                    message: 'Opps An Error Occured',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// uodate Driver Info Only not profile
+const updateDriverCarDetails = async (req, res) => {
+    const {id} = req.params
+    const {
+        vehicleType,
+        plateNo,
+        plateCode,
+        yearOfManuf,
+        companyOfManuf,
+        vehicleColor,
+    } = req.body
+
+    // checking if user has sent any data for updating or not
+    if ((Object.keys(req.body).length === 0) ) {
+        return res.status(201).json({
+            success: false,
+            message: 'You have not sent any Data for Updation'
+        })
+    }
+
+
+
+    if (!id || !vehicleType || !plateNo || !plateCode || !yearOfManuf || !companyOfManuf || !vehicleColor ) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        const isExist = await Drivers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
                 // chceking if vehicle with same plate no is already reg or not
                 const checkPlateNo = await Drivers.findOne({"vehicleDetails.plateNo": plateNo , _id: { $ne: id } })
                 if (checkPlateNo) {
@@ -281,32 +570,6 @@ const updateDriver = async (req, res) => {
                         success: false,
                         message: 'Vehicle with Same Plate No is Already Registered'
                     })
-                }
-
-                // chceking if account no already exists or not
-                const checkAccountNo = await Drivers.findOne({accountNo: accountNo , _id: { $ne: id } })
-                if (checkAccountNo) {
-                    return res.status(201).json({
-                        success: false,
-                        message: 'Driver with Same Account No is Already Registered'
-                    })
-                }
-
-                // uploading user profile iamge to multer
-                if (req.files) {
-                    let documnetsDetails = {};
-                    documnetsDetails.idCardFrontPic = req.files.idCardFrontPic[0].filename.toLowerCase()
-                    documnetsDetails.idCardBackPic = req.files.idCardBackPic[0].filename.toLowerCase()
-                    documnetsDetails.lisencePic = req.files.lisencePic[0].filename.toLowerCase()
-                    documnetsDetails.ownershipPic = req.files.ownershipPic[0].filename.toLowerCase()
-
-                    // sending data to array of vehicles
-                    req.body.documnetsDetails = {};
-                    req.body.documnetsDetails = documnetsDetails;
-
-                    // updating profile pic
-                    req.body.profilePic = "";
-                    req.body.profilePic = req.files.profilePic[0].filename.toLowerCase()
                 }
 
                 // adding vehhicles details
@@ -321,6 +584,67 @@ const updateDriver = async (req, res) => {
                 req.body.vehicleDetails = [];
                 req.body.vehicleDetails.push(vehicleDetails);
 
+                const updatedUser = await Drivers.findByIdAndUpdate(id, {
+                    $set: req.body
+                }, {
+                    new: true
+                })
+                res.status(201).json({
+                    success: true,
+                })
+
+            } catch (error) {
+                console.log("Error in updateDriverDocuments and error is : ", error)
+                return res.status(504).json({
+                    message: '!!! Opps An Error Occured !!!',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// uodate Driver payment details
+const updateDriverPaymentDetails = async (req, res) => {
+    const {id} = req.params
+    const {
+        bankName,
+        accountNo,
+        acctHolderName,
+    } = req.body
+
+    // checking if user has sent any data for updating or not
+    if ((Object.keys(req.body).length === 0)) {
+        return res.status(201).json({
+            success: false,
+            message: 'You have not sent any Data for Updation'
+        })
+    }
+
+
+    if (!id || !bankName || !accountNo || !acctHolderName) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        const isExist = await Drivers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+                // chceking if account no already exists or not
+                const checkAccountNo = await Drivers.findOne({"paymentDetails.accountNo" : accountNo , _id: { $ne: id } })
+                if (checkAccountNo) {
+                    return res.status(201).json({
+                        success: false,
+                        message: 'Driver with Same Account No is Already Registered'
+                    })
+                }
+
                 // adding payment details
                 let paymentDetails = {};
                 paymentDetails.bankName = bankName;
@@ -331,6 +655,62 @@ const updateDriver = async (req, res) => {
                 req.body.paymentDetails = paymentDetails;
 
                 const updatedUser = await Drivers.findByIdAndUpdate(id, {
+                    $set: req.body
+                }, {
+                    new: true
+                })
+                res.status(201).json({
+                    success: true,
+                })
+
+            } catch (error) {
+                console.log("Error in updateDriverPaymentDetails and error is : ", error)
+                return res.status(504).json({
+                    message: '!!! Opps An Error Occured !!!',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// uodate Driver Profile
+const updateDriverProfile = async (req, res) => {
+    const {id} = req.params
+    // checking sent file is image or not
+    if (req.file) {
+        // checking id card front image
+        if ((req.file.mimetype !== "image/jpeg" && req.file.mimetype !== "image/jpg" && req.file.mimetype !== "image/webP" && req.file.mimetype !== "image/png")) {
+            return res.json({
+                success: false,
+                message: "Profile Image Not Found"
+            });
+        }
+    }
+
+
+    if (!id ) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        const isExist = await Drivers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+                // uploading user profile iamge to multer
+                if (req.file) {
+                    // updating profile pic
+                    req.body.profilePic = "";
+                    req.body.profilePic = req.file.filename.toLowerCase()
+                }
+
+                await Drivers.findByIdAndUpdate(id, {
                     $set: req.body
                 }, {
                     new: true
@@ -1061,8 +1441,15 @@ module.exports = {
     LogInUser,
     updateUserStatus,
     updateDriver,
+    updateDriverDetails,
     addNewVehicle,
     updateDriverLocation,
     getDriverNotifications,
-    getNewlyGotOrderReqs
+    getNewlyGotOrderReqs,
+    updateDriverCarDetails,
+    updateDriverPaymentDetails,
+    getDriverPersonelDetails,
+    getDriverVehiclesDetails,
+    getDriverSingleVehicleDetails,
+    updateDriverProfile,
 }

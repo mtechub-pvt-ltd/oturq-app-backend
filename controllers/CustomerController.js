@@ -294,6 +294,65 @@ const updateCustLocation = async (req, res) => {
     }
 }
 
+// uodate customer location
+const updateCustomerLocation = async (req, res) => {
+    const {
+        id
+    } = req.params
+    const {curntLoc , currentAddress} = req.body;
+
+    // checking if user has sent any data for updating or not
+    if ((Object.keys(req.body).length === 0)) {
+        return res.status(201).json({
+            success: false,
+            message: 'You have not sent any Data'
+        })
+    }
+
+    if (!id || !curntLoc || !currentAddress) {
+        return res.status(504).json({
+            success: false,
+            message: 'Please Provide All Required Credientials'
+        })
+    } else {
+        let  isExist = await Customers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Customer Id is Incorrect'
+            })
+        } else {
+            try {
+                if (isExist.verifyStatus === false){
+                    return res.status(201).json({
+                        success: false,
+                        message: 'Sorry Could Not Place Order as this Driver has not been Verified By this App yet'
+                    })
+                }
+                isExist.curntLoc = curntLoc;
+                isExist.address = currentAddress;
+                isExist.activeStatus = true;
+
+                await Customers.findByIdAndUpdate(id, {
+                    $set: isExist
+                }, {
+                    new: true
+                })
+                res.status(201).json({
+                    success: true,
+                })
+
+            } catch (error) {
+                console.log("Error in updateCustomerLocation and error is : ", error)
+                return res.status(504).json({
+                    message: '!!! Opps An Error Occured !!!',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
 // Stripe Payments
 const makeStripePayment = async (req, res) => {
     const {
@@ -762,5 +821,6 @@ module.exports = {
     LogInUser,
     updateUserStatus,
     updateCustomer,
-    updateCustLocation
+    updateCustLocation,
+    updateCustomerLocation
 }

@@ -9,6 +9,13 @@ const {
     updateDriverLocation,
     getDriverNotifications,
     getNewlyGotOrderReqs,
+    updateDriverDetails,
+    updateDriverCarDetails,
+    updateDriverPaymentDetails,
+    getDriverPersonelDetails,
+    getDriverVehiclesDetails,
+    getDriverSingleVehicleDetails,
+    updateDriverProfile,
 } = require('../controllers/DriverController')
 const multer = require("multer")
 var storage = multer.diskStorage({
@@ -32,19 +39,19 @@ const cpUpload = upload.fields([
         maxCount: 1
     },
     {
-        name: 'idCardFrontPic',
+        name: 'idcardfromfront',
         maxCount: 1
     },
     {
-        name: 'idCardBackPic',
+        name: 'idcardfromback',
         maxCount: 1
     },
     {
-        name: 'lisencePic',
+        name: 'driversLisence',
         maxCount: 1
     },
     {
-        name: 'ownershipPic',
+        name: 'vehicleownership',
         maxCount: 1
     },
 ])
@@ -57,22 +64,43 @@ router.post('/api/driver/register', addNewUser)
 router.post('/api/driver/signin', LogInUser)
 
 // Upadte verification Stataus
-router.put('/api/driver/changeStatus/:id', updateUserStatus);
+router.put('/api/driver/changeVerifyStatus/:id', updateUserStatus);
 
 // Update driver's documents
-router.put('/api/driver/updateInfo/:id', cpUpload , updateDriver);
+router.put('/api/driver/addDocuments/:id', cpUpload , updateDriver);
 
 // Update driver info
-router.put('/api/driver/addNewVehicle/:id', addNewVehicle);
+router.put('/api/driver/addVehicle/:id', addNewVehicle);
+
+// Update driver profile Info
+router.put('/api/driver/addOwnerDetails/:id', updateDriverDetails);
+
+// Update driver car details info
+router.put('/api/driver/updateCarDetails/:id', updateDriverCarDetails);
+
+// Update driver payment details
+router.put('/api/driver/addPaymentDetails/:id', updateDriverPaymentDetails);
 
 // Update driver location
 router.put('/api/driver/updateLocation/:id', updateDriverLocation);
+
+// get driver perosnel details
+router.get('/api/driver/getPersonelDetails/:id', getDriverPersonelDetails)
+
+// get driver vehicle details
+router.get('/api/driver/getVehicleDetails/:id', getDriverVehiclesDetails)
+
+// get driver single vehicle detail
+router.get('/api/driver/getSingleVehicleDetails/:id', getDriverSingleVehicleDetails)
 
 // get driver notofications
 router.get('/api/driver/getNotifications/:id', getDriverNotifications)
 
 // get driver request accepted by customers
-router.get('/api/driver/getAcceptedrEqFromCust/:id', getNewlyGotOrderReqs)
+router.get('/api/driver/getAcceptedReqsFromCust/:id', getNewlyGotOrderReqs)
+
+// Update driver profile
+router.put('/api/driver/updateProfile/:id', upload.single("profilePic") , updateDriverProfile);
 
 // // get all users orders only
 // router.get('/api/user/getOrdersOnly/:id', getUsersOrders)

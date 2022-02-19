@@ -6,6 +6,8 @@ const {
     getDriversReponses,
     acceptDriverRequest,
     orderAcceptByDriver,
+    changeOrderStatus,
+    orderCompletedByDriver,
 } = require('../controllers/OrderController')
 const multer = require("multer")
 var storage = multer.diskStorage({
@@ -39,6 +41,11 @@ router.put('/api/order/acceptDriverRequest/:id/:driverId', acceptDriverRequest);
 // starting order
 router.put('/api/order/startOrder/:id/:driverId', orderAcceptByDriver);
 
+// chnage order status
+router.put('/api/order/changeStatus/:id/:driverId', changeOrderStatus);
+
+// ordr confirm reached by driver
+router.put('/api/order/orderReached/:id/:driverId', upload.single("orderRecieptPic"), orderCompletedByDriver);
 
 
 

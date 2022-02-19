@@ -5,6 +5,10 @@ const OrderSchema = new mongoose.Schema({
         type: String,
         default : ''
     }],
+    orderId: {
+        type: Number,
+        default: '0'
+    },
     postedBy: {
         type: mongoose.Types.ObjectId,
         ref: 'oturqappcustomers',
@@ -18,17 +22,6 @@ const OrderSchema = new mongoose.Schema({
         required : true,
         default: ''
     },
-    // pickUpLoc: {
-    //     type: {
-    //         type: String,
-    //         default: "Point",
-    //     },
-    //     coordinates: {
-    //         type: [Number], //the type is an array of numbers
-    //         //index: "2dsphere"
-    //     },
-    //     fromattedAdd: "",
-    // },
     pickUpLoc : {
         type : Array
     },
@@ -63,18 +56,6 @@ const OrderSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
-    // dropLoc: {
-    //     type: {
-    //         type: String,
-    //         default: "Point",
-    //     },
-    //     coordinates: {
-    //         type: [Number], //the type is an array of numbers
-    //         //index: "2dsphere"
-    //     },
-    //     fromattedAdd: ""
-    // },
-
     respondedDrivers: [{
         id :{
             type: mongoose.Types.ObjectId,
@@ -109,10 +90,6 @@ const OrderSchema = new mongoose.Schema({
         type: Number,
         default: '0'
     },
-    orderTravelingStatus: {
-        type: String,
-        default: ''
-    },
     orderStatus: {
         type: String,
         default: ''
@@ -137,23 +114,11 @@ const OrderSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
-    orderFinalByDriver: {
-        type: Boolean,
-        default: 'false'
-    },
-    orderFinalByCustomer: {
-        type: Boolean,
-        default: 'false'
-    },
     orderRecieptPic : {  // pic of order
         type: String,
         default: ''
     },
     confrimOrderReachedByDriver : {
-        type: Boolean,
-        default: 'false'
-    },
-    confrimOrderReachedByCust: {
         type: Boolean,
         default: 'false'
     },
