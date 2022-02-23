@@ -1,12 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const {
-     addNewUser,
+     SignInUser,
      LogInUser,
      updateUserStatus,
     updateCustomer,
     updateCustLocation,
     updateCustomerLocation,
+    AddUserNewLocations,
+    getUserSavedLocations,
+    updateCustLocations
 } = require('../controllers/CustomerController')
 const multer = require("multer")
 var storage = multer.diskStorage({
@@ -23,13 +26,19 @@ const upload = multer({
 });
 
 // Sign Up Customer
-router.post('/api/customer/register', addNewUser)
-
-// Sign In Customer
-router.post('/api/customer/signin', LogInUser)
+router.post('/api/customer/signin', SignInUser)
 
 // Upadte verification Stataus
 router.put('/api/customer/changeVerifyStatus/:id', updateUserStatus);
+
+// add new location
+router.put('/api/customer/saveNewLocation/:id', AddUserNewLocations);
+
+// delete any saved location
+router.put('/api/customer/deleteSavedLocation/:id', updateCustLocations);
+
+// getting saved location
+router.get('/api/customer/getSavedLocation/:id', getUserSavedLocations);
 
 // Update user info
 router.put('/api/customer/updateProfile/:id', upload.single("profilePic"), updateCustomer);

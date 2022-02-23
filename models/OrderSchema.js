@@ -9,6 +9,10 @@ const OrderSchema = new mongoose.Schema({
         type: Number,
         default: '0'
     },
+    availDrivers: [{
+        type: mongoose.Types.ObjectId,
+        ref: 'oturqappdrivers',
+    }],
     postedBy: {
         type: mongoose.Types.ObjectId,
         ref: 'oturqappcustomers',
@@ -92,9 +96,9 @@ const OrderSchema = new mongoose.Schema({
     },
     orderStatus: {
         type: String,
-        default: ''
+        default: 'Created'
     },
-    status: { // we will add active , travelling or completed
+    status: { // we will add active
         type: Boolean,
         default: false
     },

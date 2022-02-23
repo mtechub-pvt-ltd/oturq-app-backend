@@ -5,13 +5,8 @@ const CustomerSchema = new mongoose.Schema({
         type: Number,
         required: true,
     },
-    codeRecieved: {
-        type: Number,
-        //required: true,
-    },
     verifyStatus: {
         type: Boolean,
-        //required: true,
         default : false
     },
     firstname: {

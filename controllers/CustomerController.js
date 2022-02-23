@@ -5,11 +5,12 @@ const jwt = require('jsonwebtoken');
 const mongoose = require("mongoose")
 const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY;
 const stripe = require('stripe')(process.env.Stripe_Secret_key)
+const URL = "http://localhost:8080"
 
 
 
-// Sign Up new User
-const addNewUser = async (req, res) => {
+// Sign In user  (New Api)
+const SignInUser = async (req, res) => {
     const {
         phoneNo
     } = req.body;
@@ -33,11 +34,29 @@ const addNewUser = async (req, res) => {
                 phoneNo: phoneNo
             })
 
+        // if customer already exists
         if (check.length > 0) {
-            return res.json({
-                success: false,
-                message: 'User Already Exists'
-            })
+            let isExist = await Customers.findOne({phoneNo : phoneNo} , {fullname : 1 , lastname : 1 , phoneNo : 1 , whatsAppNo : 1 , profilePic : 1 , verifyStatus : 1})
+
+            if (isExist.verifyStatus === false) {
+                return res.json({
+                    success: false,
+                    message: "User Can Not Sign In, As User has Not Been Verified Yet"
+                })
+            }
+
+            const token = jwt.sign({
+                id: isExist._id
+            }, JWT_SECRET_KEY, {
+                expiresIn: '24h'
+            }); // gentating token
+
+
+             return res.json({
+                 myResult: isExist,
+                 success: true,
+                 token
+             });
         } else {
             let newUser = new Customers({
                     ...req.body
@@ -127,7 +146,7 @@ const updateUserStatus = async (req, res) => {
     if (!id) {
         return res.status(201).json({
             success: false,
-            message: 'Please Fill All Required Credientials'
+            message: 'Customer Id Not found'
         })
     } else {
         let isExist = await Customers.findById(id)
@@ -203,18 +222,12 @@ const updateCustomer = async (req, res) => {
             })
         } else {
             try {
-                // uploading user profile picture
-                // if (req.files.profilePic) {
-                //     await cloudinary.uploader.upload(req.files.profilePic.tempFilePath, (err, res) => {
-                //         req.body.profilePic = res.url;
-                //     })
-                // }
                 // uploading user profile iamge to multer
                 if (req.file) {
                     var lower = req.file.filename.toLowerCase();
-                    req.body.profilePic = lower;
+                    req.body.profilePic = URL + "/customerPics/" + lower;
                 }
-                const updatedUser = await Customers.findByIdAndUpdate(id, {
+                await Customers.findByIdAndUpdate(id, {
                     $set: req.body
                 }, {
                     new: true
@@ -226,7 +239,7 @@ const updateCustomer = async (req, res) => {
             } catch (error) {
                 console.log("Error in updateCustomer and error is : ", error)
                 return res.status(504).json({
-                    message: '!!! Opps An Error Occured !!!',
+                    message: 'Opps An Error Occured',
                     success: false
                 })
             }
@@ -267,7 +280,7 @@ const updateCustLocation = async (req, res) => {
                 if (isExist.verifyStatus === false){
                     return res.status(201).json({
                         success: false,
-                        message: 'Sorry Could Not Place Order as this Customer has not been Verified By this App yet'
+                        message: 'Sorry Operation Could Not Performed as this Customer has not been Verified By this App yet'
                     })
                 }
                 isExist.curntLoc = curntLoc;
@@ -287,6 +300,134 @@ const updateCustLocation = async (req, res) => {
                 console.log("Error in updateCustLocation and error is : ", error)
                 return res.status(504).json({
                     message: '!!! Opps An Error Occured !!!',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// getting customer saved locations
+const getUserSavedLocations = async (req, res) => {
+    const {
+        id
+    } = req.params
+
+    if (!id) {
+        return res.status(504).json({
+            success: false,
+            message: 'Customer Id Not Found'
+        })
+    } else {
+        let  isExist = await Customers.findById(id , {myLocations : 1 , _id : 0} )
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Customer Id is Incorrect'
+            })
+        } else {
+            try {
+                res.status(201).json({
+                    success: true,
+                    locations: isExist
+                })
+
+            } catch (error) {
+                console.log("Error in getUserSavedLocations and error is : ", error)
+                return res.status(504).json({
+                    message: '!!! Opps An Error Occured !!!',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// getting customer saved locations
+const AddUserNewLocations = async (req, res) => {
+    const {
+        id
+    } = req.params
+    const {location} = req.body;
+
+    if (!id || !location) {
+        return res.status(504).json({
+            success: false,
+            message: 'Please fill All Required Credientials'
+        })
+    } else {
+        let  isExist = await Customers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Customer Id is Incorrect'
+            })
+        }
+
+        isExist = await Customers.findOne({_id : id , myLocations : { $elemMatch: { $eq : location } }} )
+        console.log("isExist : ", isExist)
+        if (isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Address Already Exists'
+            })
+        } else {
+            try {
+                await Customers.findByIdAndUpdate(id , {$push : {myLocations : location}} , {new : true})
+                res.status(201).json({
+                    success: true,
+                })
+
+            } catch (error) {
+                console.log("Error in AddUserNewLocations and error is : ", error)
+                return res.status(504).json({
+                    message: 'Opps An Error Occured',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+
+// deleteing from customer saved locations
+const updateCustLocations = async (req, res) => {
+    const {
+        id
+    } = req.params
+    const {location} = req.body;
+
+    if (!id || !location) {
+        return res.status(504).json({
+            success: false,
+            message: 'Please fill All Required Credientials'
+        })
+    } else {
+        let  isExist = await Customers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Customer Id is Incorrect'
+            })
+        }
+
+        isExist = await Customers.findOne({_id : id , myLocations : { $elemMatch: { $eq : location } }} )
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'This Address Does Not Exist'
+            })
+        } else {
+            try {
+                await Customers.findByIdAndUpdate(id , {$pull : {myLocations : location}} , {new : true})
+                res.status(201).json({
+                    success: true,
+                })
+
+            } catch (error) {
+                console.log("Error in updateCustLocations and error is : ", error)
+                return res.status(504).json({
+                    message: 'An Error Occured',
                     success: false
                 })
             }
@@ -537,290 +678,15 @@ const makeStripePayment = async (req, res) => {
     }
 }
 
-// get all Users subscribed playlists
-const getSubPlayLists = async (req, res) => {
-    const {
-        id
-    } = req.params;
-    try {
-        const allPlayLists = await Users.aggregate([{
-                $match: {
-                    _id: mongoose.Types.ObjectId(id),
-                },
-            },
-            {
-                $lookup: {
-                    from: 'lmsapptopics',
-                    localField: 'puchasedPlayList.id',
-                    foreignField: '_id',
-                    as: 'puchasedPlayList'
-                },
-            },
-        ]).sort({
-            puchasedPlayList: 0
-        });
-        if (allPlayLists === null) {
-            return res.json({
-                success: false,
-                message: 'No Users Found ',
-            });
-        } else {
-            return res.json({
-                allPlayLists,
-                success: true,
-                message: 'Got Result ',
-            });
-        }
-    } catch (error) {
-        console.log("Error in getSubPlayLists and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-
-///    Admin     Operations      /////
-
-
-
-
-// get all Users
-const getAllUsers = async (req, res) => {
-    try {
-        const allUsers = await Users.find({}, {
-            password: 0,
-            otpCode: 0,
-            codeSentTime: 0,
-            orders: 0,
-            updatedAt: 0,
-            __v: 0
-        });
-        if (!allUsers) {
-            return res.json({
-                success: false,
-                message: 'No User Found ',
-            });
-        } else {
-            return res.json({
-                allUsers,
-                success: true,
-            });
-        }
-    } catch (error) {
-        console.log("Error in getAllUsers and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-// get single User for admin
-const getSingleUserAmdin = async (req, res) => {
-    const {
-        id
-    } = req.params;
-    try {
-        const singleUser = await Users.findById(id, {
-            password: 0,
-            otpCode: 0,
-            codeSentTime: 0,
-            orders: 0,
-            updatedAt: 0,
-            __v: 0
-        });
-        if (!singleUser) {
-            return res.json({
-                success: false,
-                message: 'No User Found ',
-            });
-        } else {
-            return res.json({
-                singleUser,
-                success: true,
-            });
-        }
-    } catch (error) {
-        console.log("Error in getSingleUserAmdin and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-// get all Recent Users
-const getRecentUsers = async (req, res) => {
-    try {
-        const allUsers = await Users.find({}).limit(4);
-        if (!allUsers) {
-            return res.json({
-                success: false,
-                message: 'No Users Found ',
-            });
-        } else {
-            return res.json({
-                allUsers,
-                success: true
-            });
-        }
-    } catch (error) {
-        console.log("Error in getRecentUsers and error is : ", error)
-        return res.json({
-            error,
-            success: false
-        });
-    }
-}
-
-// get Single Users
-const getSingleUser = async (req, res) => {
-    const {
-        id
-    } = req.params;
-
-    try {
-        const singleUser = await Users.findById(id, {
-            otpCode: 0,
-            codeSentTime: 0,
-            puchasedPlayList: 0,
-            orders: 0,
-            createdAt: 0,
-            updatedAt: 0,
-            __v: 0
-        })
-
-        if (!singleUser) {
-            return res.json({
-                success: false,
-                message: 'No User Found ',
-            });
-        } else {
-            return res.json({
-                singleUser,
-                success: true,
-            });
-        }
-    } catch (error) {
-        console.log("Error in getSingleUser and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-// get Single Users Orders Only
-const getUsersOrders = async (req, res) => {
-    const {
-        id
-    } = req.params;
-
-    try {
-        const allOrders = await Users.findById(id, {
-            _id: 0,
-            orders: 1
-        })
-
-        if (allOrders === null) {
-            return res.json({
-                success: false,
-                message: 'No Order Found ',
-            });
-        } else {
-            return res.json({
-                allOrders,
-                success: true,
-            });
-        }
-    } catch (error) {
-        console.log("Error in getUsersOrders and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-// get all Users Count
-const getAllUsersCount = async (req, res) => {
-    try {
-        const count = await Users.find({}).count();
-        if (!count) {
-            return res.json({
-                success: false,
-                message: 'No User Found ',
-            });
-        } else {
-            return res.json({
-                count,
-                success: true,
-            });
-        }
-    } catch (error) {
-        console.log("Error in getAllUsersCount and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-
-// delete User
-const deleteUser = async (req, res) => {
-    const {
-        id
-    } = req.params;
-    try {
-        const gotUser = await Users.findById(id);
-        if (!gotUser) {
-            return res.status(201).json({
-                success: false,
-                message: "No User Found "
-            })
-        } else {
-            // checking if user has any playlist subscription remaining or not
-            if (gotUser.puchasedPlayList.length > 0) {
-                const curentDate = new Date()
-                for (let i = 0; i !== gotUser.puchasedPlayList.length; i++) {
-                    if (gotUser.puchasedPlayList[i].endDate > curentDate) {
-                        return res.status(403).json({
-                            success: false,
-                            message: "Sorry, but yu can not delete this User, as User has a Subscription End Date for a PlayList which is greater than Current date. Thanks"
-                        })
-                    }
-                }
-            }
-
-            const deletedUser = await Users.findByIdAndDelete(id);
-            if (!deletedUser) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'User Not Found ',
-                });
-            } else {
-                return res.status(200).json({
-                    success: true,
-                });
-            }
-        }
-    } catch (error) {
-        console.log("Error in deleteUser and error is : ", error)
-        return res.status(504).json({
-            success: false,
-        });
-    }
-}
-
 
 module.exports = {
-    addNewUser,
+    SignInUser,
     LogInUser,
     updateUserStatus,
     updateCustomer,
     updateCustLocation,
-    updateCustomerLocation
+    updateCustomerLocation,
+    AddUserNewLocations,
+    getUserSavedLocations,
+    updateCustLocations
 }

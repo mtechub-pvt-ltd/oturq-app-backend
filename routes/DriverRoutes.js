@@ -1,21 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const {
-    addNewUser,
-    LogInUser,
+    signInDriver,
     updateUserStatus,
-    updateDriver,
+    addDriverDocs,
     addNewVehicle,
     updateDriverLocation,
     getDriverNotifications,
     getNewlyGotOrderReqs,
-    updateDriverDetails,
+    addDriverDetails,
     updateDriverCarDetails,
-    updateDriverPaymentDetails,
+    addDriverPaymentDetails,
+    getDriverPaymentDetails,
     getDriverPersonelDetails,
     getDriverVehiclesDetails,
     getDriverSingleVehicleDetails,
     updateDriverProfile,
+    updateDriverSingleVehicleDetails,
+    getDriverProfile,
+    updateDriverDetails,
+    getDriverDocs,
 } = require('../controllers/DriverController')
 const multer = require("multer")
 var storage = multer.diskStorage({
@@ -58,31 +62,41 @@ const cpUpload = upload.fields([
 
 
 // Sign Up driver
-router.post('/api/driver/register', addNewUser)
+router.post('/api/driver/signin', signInDriver)
 
-// Sign In driver
-router.post('/api/driver/signin', LogInUser)
 
 // Upadte verification Stataus
 router.put('/api/driver/changeVerifyStatus/:id', updateUserStatus);
 
 // Update driver's documents
-router.put('/api/driver/addDocuments/:id', cpUpload , updateDriver);
+router.put('/api/driver/addDocuments/:id', cpUpload, addDriverDocs);
+
+// getting driver's documents
+router.get('/api/driver/getDocuments/:id', getDriverDocs);
 
 // Update driver info
 router.put('/api/driver/addVehicle/:id', addNewVehicle);
 
-// Update driver profile Info
-router.put('/api/driver/addOwnerDetails/:id', updateDriverDetails);
+// adding driver profile Info
+router.put('/api/driver/addOwnerDetails/:id', addDriverDetails);
+
+// updating driver profile Info
+router.put('/api/driver/updateOwnerDetails/:id', updateDriverDetails);
 
 // Update driver car details info
 router.put('/api/driver/updateCarDetails/:id', updateDriverCarDetails);
 
 // Update driver payment details
-router.put('/api/driver/addPaymentDetails/:id', updateDriverPaymentDetails);
+router.put('/api/driver/addPaymentDetails/:id', addDriverPaymentDetails);
+
+// Update driver payment details
+router.get('/api/driver/getPaymentDetails/:id', getDriverPaymentDetails);
 
 // Update driver location
 router.put('/api/driver/updateLocation/:id', updateDriverLocation);
+
+// Update driver vehicle detail Single
+router.put('/api/driver/updateVehicleDetails/:id/:owner', updateDriverSingleVehicleDetails);
 
 // get driver perosnel details
 router.get('/api/driver/getPersonelDetails/:id', getDriverPersonelDetails)
@@ -91,7 +105,7 @@ router.get('/api/driver/getPersonelDetails/:id', getDriverPersonelDetails)
 router.get('/api/driver/getVehicleDetails/:id', getDriverVehiclesDetails)
 
 // get driver single vehicle detail
-router.get('/api/driver/getSingleVehicleDetails/:id', getDriverSingleVehicleDetails)
+router.get('/api/driver/getSingleVehicleDetails/:id/:owner', getDriverSingleVehicleDetails)
 
 // get driver notofications
 router.get('/api/driver/getNotifications/:id', getDriverNotifications)
@@ -102,23 +116,8 @@ router.get('/api/driver/getAcceptedReqsFromCust/:id', getNewlyGotOrderReqs)
 // Update driver profile
 router.put('/api/driver/updateProfile/:id', upload.single("profilePic") , updateDriverProfile);
 
-// // get all users orders only
-// router.get('/api/user/getOrdersOnly/:id', getUsersOrders)
-
-// // get all users
-// router.get('/api/user/getAll', getAllUsers)
-
-// // get all users recent
-// router.get('/api/user/getRecentUsers', getRecentUsers)
-
-// // get all users Count
-// router.get('/api/user/getAll/count', getAllUsersCount)
-
-// // get single users
-// router.get('/api/user/getSingle/:id', getSingleUser)
-
-// // deleting user
-// router.delete('/api/user/deleteUser/:id', deleteUser);
+// getting driver profile info
+router.get('/api/driver/getProfileDetails/:id', getDriverProfile);
 
 
 module.exports = router;

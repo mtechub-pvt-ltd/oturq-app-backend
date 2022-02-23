@@ -1,13 +1,14 @@
 const Drivers = require('../models/DriverSchema')
-// const PlayLists = require('../models/PlayListSchema')
+const Vehicles = require('../models/VehicleSchema')
 const mongoose = require("mongoose")
 const jwt = require('jsonwebtoken');
 const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY;
 //const stripe = require('stripe')(process.env.Stripe_Secret_key)
+const URL = "http://localhost:8080"
 
 
-// Sign Up new User
-const addNewUser = async (req, res) => {
+// Sign Up/Sign In
+const signInDriver = async (req, res) => {
     const {
         phoneNo
     } = req.body;
@@ -28,26 +29,59 @@ const addNewUser = async (req, res) => {
         }
 
         let check = await Drivers.find({
-                phoneNo: phoneNo
-            })
+            phoneNo: phoneNo
+        })
 
         if (check.length > 0) {
-            return res.json({
-                success: false,
-                message: 'User Already Exists'
+            let isExist = await Drivers.findOne({
+                phoneNo: phoneNo
+            }, {
+                name: 1,
+                familyName: 1,
+                phoneNo: 1,
+                whatsAppNo: 1,
+                profilePic: 1,
+                verifyStatus: 1
             })
+
+
+            if (!isExist) {
+                return res.json({
+                    success: false,
+                    message: "Driver Not Found"
+                })
+            }
+
+            if (isExist.verifyStatus === false) {
+                return res.json({
+                    success: false,
+                    message: "Driver Can Not Sign In, As Driver has Not Been Verified Yet"
+                })
+            }
+
+            const token = jwt.sign({
+                id: isExist._id
+            }, JWT_SECRET_KEY, {
+                expiresIn: '24h'
+            }); // gentating token
+
+            return res.json({
+                myResult: isExist,
+                success: true,
+                token
+            });
         } else {
             let newUser = new Drivers({
-                    ...req.body
-                })
+                ...req.body
+            })
 
             try {
                 await newUser.save();
 
                 res.status(201).json({
                     succes: true,
-                    userId : newUser._id,
-                    message: 'User SuccessFully Added'
+                    userId: newUser._id,
+                    message: 'Driver SuccessFully Added'
                 })
             } catch (error) {
                 console.log("Error in addNewUser and error is : ", error)
@@ -62,7 +96,9 @@ const addNewUser = async (req, res) => {
 
 // Logging In User
 const LogInUser = async (req, res) => {
-    const {phoneNo} = req.body
+    const {
+        phoneNo
+    } = req.body
 
     if (!phoneNo) {
         return res.json({
@@ -79,7 +115,16 @@ const LogInUser = async (req, res) => {
                 });
             }
 
-            let isExist = await Drivers.findOne({phoneNo : phoneNo} , {name : 1 , familyName : 1 , phoneNo : 1 , whatsAppNo : 1 , profilePic : 1 , verifyStatus : 1})
+            let isExist = await Drivers.findOne({
+                phoneNo: phoneNo
+            }, {
+                name: 1,
+                familyName: 1,
+                phoneNo: 1,
+                whatsAppNo: 1,
+                profilePic: 1,
+                verifyStatus: 1
+            })
 
 
             if (!isExist) {
@@ -120,7 +165,9 @@ const LogInUser = async (req, res) => {
 
 // uodate user code
 const updateUserStatus = async (req, res) => {
-    const {id} = req.params;
+    const {
+        id
+    } = req.params;
 
     if (!id) {
         return res.status(201).json({
@@ -138,15 +185,19 @@ const updateUserStatus = async (req, res) => {
         } else {
             try {
                 // checking if user has already been verified
-                if (isExist.verifyStatus !== true){
+                if (isExist.verifyStatus !== true) {
                     isExist.verifyStatus = true;
-                    await Drivers.findByIdAndUpdate(id, { $set: isExist}, { new: true})
+                    await Drivers.findByIdAndUpdate(id, {
+                        $set: isExist
+                    }, {
+                        new: true
+                    })
 
                     res.status(201).json({
                         success: true,
-                        message : "User Verification Status Changed. User can Now Sign In"
+                        message: "User Verification Status Changed. User can Now Sign In"
                     })
-                }else{
+                } else {
                     res.status(201).json({
                         success: true,
                         message: "User has Already been Verfied"
@@ -164,11 +215,13 @@ const updateUserStatus = async (req, res) => {
 }
 
 // uodate Driver Documents only
-const updateDriver = async (req, res) => {
-    const {id} = req.params
+const addDriverDocs = async (req, res) => {
+    const {
+        id
+    } = req.params
 
     // checking if there are any files recieved
-    if(!req.files && !req.file){
+    if (!req.files && !req.file) {
         return res.json({
             success: false,
             message: "No Documents Images Found"
@@ -176,7 +229,7 @@ const updateDriver = async (req, res) => {
     }
 
     // checking if any image is remaining or not
-    if (!req.files.idcardfromfront || !req.files.idcardfromback || !req.files.driversLisence || !req.files.vehicleownership){
+    if (!req.files.idcardfromfront || !req.files.idcardfromback || !req.files.driversLisence || !req.files.vehicleownership) {
         return res.json({
             success: false,
             message: "Some Documents Image Not Found"
@@ -185,14 +238,6 @@ const updateDriver = async (req, res) => {
 
     // checking sent file is image or not
     if (req.files) {
-        // checking id card front image
-        if ((req.files.profilePic[0].mimetype !== "image/jpeg" && req.files.profilePic[0].mimetype !== "image/jpg" && req.files.profilePic[0].mimetype !== "image/webP" && req.files.profilePic[0].mimetype !== "image/png")) {
-            return res.json({
-                success: false,
-                message: "Profile Image Not Found"
-            });
-        }
-
         // checking id card front image
         if ((req.files.idcardfromfront[0].mimetype !== "image/jpeg" && req.files.idcardfromfront[0].mimetype !== "image/jpg" && req.files.idcardfromfront[0].mimetype !== "image/webP" && req.files.idcardfromfront[0].mimetype !== "image/png")) {
             return res.json({
@@ -227,7 +272,7 @@ const updateDriver = async (req, res) => {
     }
 
 
-    if (!id ) {
+    if (!id) {
         return res.status(504).json({
             success: false,
             message: 'Id is Required for Updation'
@@ -244,21 +289,17 @@ const updateDriver = async (req, res) => {
                 // uploading user profile iamge to multer
                 if (req.files) {
                     let documnetsDetails = {};
-                    documnetsDetails.idcardfromfront = req.files.idcardfromfront[0].filename.toLowerCase()
-                    documnetsDetails.idcardfromback = req.files.idcardfromback[0].filename.toLowerCase()
-                    documnetsDetails.driversLisence = req.files.driversLisence[0].filename.toLowerCase()
-                    documnetsDetails.vehicleownership = req.files.vehicleownership[0].filename.toLowerCase()
+                    documnetsDetails.idcardfromfront = URL + "/driverPics/" + req.files.idcardfromfront[0].filename.toLowerCase()
+                    documnetsDetails.idcardfromback = URL + "/driverPics/" + req.files.idcardfromback[0].filename.toLowerCase()
+                    documnetsDetails.driversLisence = URL + "/driverPics/" + req.files.driversLisence[0].filename.toLowerCase()
+                    documnetsDetails.vehicleownership = URL + "/driverPics/" + req.files.vehicleownership[0].filename.toLowerCase()
 
                     // sending data to array of vehicles
                     req.body.documnetsDetails = {};
                     req.body.documnetsDetails = documnetsDetails;
-
-                    // updating profile pic
-                    req.body.profilePic = "";
-                    req.body.profilePic = req.files.profilePic[0].filename.toLowerCase()
                 }
 
-                const updatedUser = await Drivers.findByIdAndUpdate(id, {
+                await Drivers.findByIdAndUpdate(id, {
                     $set: req.body
                 }, {
                     new: true
@@ -268,9 +309,9 @@ const updateDriver = async (req, res) => {
                 })
 
             } catch (error) {
-                console.log("Error in updateDriver and error is : ", error)
+                console.log("Error in addDriverDocs and error is : ", error)
                 return res.status(504).json({
-                    message: '!!! Opps An Error Occured !!!',
+                    message: 'Opps An Error Occured',
                     success: false
                 })
             }
@@ -278,10 +319,53 @@ const updateDriver = async (req, res) => {
     }
 }
 
+// get driver singel documents
+const getDriverDocs = async (req, res) => {
+    const {
+        id
+    } = req.params
+
+    if (!id) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        const isExist = await Drivers.findById(id, {
+            documnetsDetails: 1
+        })
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+
+                res.status(201).json({
+                    success: true,
+                    IdCardFromFront: isExist.documnetsDetails.idcardfromfront,
+                    IdCardFromBack: isExist.documnetsDetails.idcardfromback,
+                    Driver_Lisence: isExist.documnetsDetails.driversLisence,
+                    vehicle_OwnerShip: isExist.documnetsDetails.vehicleownership,
+                })
+
+            } catch (error) {
+                console.log("Error in getDriverDocs and error is : ", error)
+                return res.status(504).json({
+                    message: 'Opps An Error Occured',
+                    success: false
+                })
+            }
+        }
+    }
+}
 
 // uodate Driver Info Only not profile
-const updateDriverDetails = async (req, res) => {
-    const {id} = req.params
+const addDriverDetails = async (req, res) => {
+    const {
+        id
+    } = req.params
     const {
         name,
         familyName,
@@ -298,9 +382,8 @@ const updateDriverDetails = async (req, res) => {
         })
     }
 
-    
 
-    if (!id || !name || !familyName || !whatsAppNo || !gender || !address ) {
+    if (!id || !name || !familyName || !whatsAppNo || !gender || !address) {
         return res.status(504).json({
             success: false,
             message: 'Id is Required for Updation'
@@ -315,16 +398,101 @@ const updateDriverDetails = async (req, res) => {
         } else {
             try {
                 // checking if name is available or not
-                const checkIsExist = await Drivers.findOne({name: name , familyName : familyName ,  _id: { $ne: id } })
-                if (checkIsExist){
+                const checkIsExist = await Drivers.findOne({
+                    name: name,
+                    _id: {
+                        $ne: id
+                    }
+                })
+                if (checkIsExist) {
                     return res.status(201).json({
                         success: false,
-                        message: 'Name or family Name Already Exists'
+                        message: 'Name Already Exists'
                     })
                 }
 
-                const updatedUser = await Drivers.findByIdAndUpdate(id, {
+                await Drivers.findByIdAndUpdate(id, {
                     $set: req.body
+                }, {
+                    new: true
+                })
+                res.status(201).json({
+                    success: true,
+                })
+
+            } catch (error) {
+                console.log("Error in addDriverDetails and error is : ", error)
+                return res.status(504).json({
+                    message: '!!! Opps An Error Occured !!!',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// uodate Driver Info Only not profile
+const updateDriverDetails = async (req, res) => {
+    const {
+        id
+    } = req.params
+
+    // checking if user has sent any data for updating or not
+    if ((Object.keys(req.body).length === 0)) {
+        return res.status(201).json({
+            success: false,
+            message: 'You have not sent any Data for Updation'
+        })
+    }
+
+
+    if (!id) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        let isExist = await Drivers.findById(id)
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+                if (req.body.name) {
+                    // checking if name is available or not
+                    let checkIsExist = await Drivers.findOne({
+                        name: req.body.name,
+                        _id: {
+                            $ne: id
+                        }
+                    })
+                    if (checkIsExist) {
+                        return res.status(201).json({
+                            success: false,
+                            message: 'Name Already Exists'
+                        })
+                    }
+                    isExist.name = req.body.name
+                }
+                if (req.body.familyName) {
+                    isExist.familyName = req.body.familyName
+                }
+                if (req.body.whatsAppNo) {
+                    isExist.whatsAppNo = req.body.whatsAppNo
+                }
+                if (req.body.gender) {
+                    isExist.gender = req.body.gender
+                }
+                if (req.body.address) {
+                    isExist.address = req.body.address
+                }
+
+
+
+                await Drivers.findByIdAndUpdate(id, {
+                    $set: isExist
                 }, {
                     new: true
                 })
@@ -364,7 +532,14 @@ const getDriverPersonelDetails = async (req, res) => {
         } else {
             try {
                 // checking if name is available or not
-                const checkIsExist = await Drivers.findById(id , {name : 1 , familyName : 1 , gender : 1 , address : 1 , whatsAppNo : 1 , _id : 0})
+                const checkIsExist = await Drivers.findById(id, {
+                    name: 1,
+                    familyName: 1,
+                    gender: 1,
+                    address: 1,
+                    whatsAppNo: 1,
+                    _id: 0
+                })
                 if (!checkIsExist) {
                     return res.status(201).json({
                         success: false,
@@ -409,17 +584,24 @@ const getDriverVehiclesDetails = async (req, res) => {
         } else {
             try {
                 // checking if name is available or not
-                const checkIsExist = await Drivers.findById(id , {vehicleDetails : 1 , _id : 0 })
+                const checkIsExist = await Vehicles.find({
+                    owner: id
+                }, {
+                    owner: 0,
+                    createdAt: 0,
+                    updatedAt: 0,
+                    __v: 0
+                })
                 if (!checkIsExist) {
                     return res.status(201).json({
                         success: false,
-                        message: 'No User Found'
+                        message: 'No Vehicle Registered for this Driver'
                     })
                 }
 
                 res.status(201).json({
                     success: true,
-                    checkIsExist
+                    allVehicles: checkIsExist
                 })
 
             } catch (error) {
@@ -436,9 +618,9 @@ const getDriverVehiclesDetails = async (req, res) => {
 // get driver single vehicles detail
 const getDriverSingleVehicleDetails = async (req, res) => {
     const {
-        id
+        id,
+        owner
     } = req.params
-    const {vehicleId} = req.body
 
     if (!id) {
         return res.status(504).json({
@@ -446,7 +628,7 @@ const getDriverSingleVehicleDetails = async (req, res) => {
             message: 'Id is Required for Updation'
         })
     } else {
-        const isExist = await Drivers.findById(id)
+        const isExist = await Drivers.findById(owner)
         if (!isExist) {
             return res.status(201).json({
                 success: false,
@@ -455,7 +637,15 @@ const getDriverSingleVehicleDetails = async (req, res) => {
         } else {
             try {
                 // checking if name is available or not
-                const checkIsExist = await Drivers.findOne({_id : id , "vehicleDetails._id" : vehicleId } , {vehicleDetails : 1 , _id : 0 })
+                const checkIsExist = await Vehicles.findOne({
+                    _id: id,
+                    owner: owner
+                }, {
+                    owner: 0,
+                    createdAt: 0,
+                    updatedAt: 0,
+                    __v: 0
+                })
                 if (!checkIsExist) {
                     return res.status(201).json({
                         success: false,
@@ -465,7 +655,7 @@ const getDriverSingleVehicleDetails = async (req, res) => {
 
                 res.status(201).json({
                     success: true,
-                    checkIsExist
+                    singleVehicle: checkIsExist
                 })
 
             } catch (error) {
@@ -479,12 +669,12 @@ const getDriverSingleVehicleDetails = async (req, res) => {
     }
 }
 
-// edit driver single vehicles detail
-const editSingleVehicleDetails = async (req, res) => {
+// update driver single vehicles detail
+const updateDriverSingleVehicleDetails = async (req, res) => {
     const {
-        id
+        id,
+        owner
     } = req.params
-    const {vehicleId} = req.body
 
     if (!id) {
         return res.status(504).json({
@@ -492,7 +682,7 @@ const editSingleVehicleDetails = async (req, res) => {
             message: 'Id is Required for Updation'
         })
     } else {
-        const isExist = await Drivers.findById(id)
+        const isExist = await Drivers.findById(owner)
         if (!isExist) {
             return res.status(201).json({
                 success: false,
@@ -501,19 +691,27 @@ const editSingleVehicleDetails = async (req, res) => {
         } else {
             try {
                 // checking if name is available or not
-                let checkIsExist = await Drivers.findOne({_id : id , "vehicleDetails._id" : vehicleId } , {vehicleDetails : 1 , _id : 0 })
+                const checkIsExist = await Vehicles.findOne({
+                    _id: id,
+                    owner: owner
+                })
                 if (!checkIsExist) {
                     return res.status(201).json({
                         success: false,
-                        message: 'Not Found'
+                        message: 'Not Vehicle On This Driver  Found'
                     })
                 }
-                
-                await Drivers.findOneAndUpdate({_id : id , "vehicleDetails._id" : vehicleId } ,{$set : {}}, {});
+
+                req.body.owner = owner;
+                await Vehicles.findByIdAndUpdate(id, {
+                    $set: req.body
+                }, {
+                    new: true
+                });
 
                 res.status(201).json({
                     success: true,
-                    checkIsExist
+                    message: "Vehicle Details Updated SuccessFully"
                 })
 
             } catch (error) {
@@ -529,7 +727,9 @@ const editSingleVehicleDetails = async (req, res) => {
 
 // uodate Driver Info Only not profile
 const updateDriverCarDetails = async (req, res) => {
-    const {id} = req.params
+    const {
+        id
+    } = req.params
     const {
         vehicleType,
         plateNo,
@@ -540,7 +740,7 @@ const updateDriverCarDetails = async (req, res) => {
     } = req.body
 
     // checking if user has sent any data for updating or not
-    if ((Object.keys(req.body).length === 0) ) {
+    if ((Object.keys(req.body).length === 0)) {
         return res.status(201).json({
             success: false,
             message: 'You have not sent any Data for Updation'
@@ -549,7 +749,7 @@ const updateDriverCarDetails = async (req, res) => {
 
 
 
-    if (!id || !vehicleType || !plateNo || !plateCode || !yearOfManuf || !companyOfManuf || !vehicleColor ) {
+    if (!id || !vehicleType || !plateNo || !plateCode || !yearOfManuf || !companyOfManuf || !vehicleColor) {
         return res.status(504).json({
             success: false,
             message: 'Id is Required for Updation'
@@ -564,7 +764,12 @@ const updateDriverCarDetails = async (req, res) => {
         } else {
             try {
                 // chceking if vehicle with same plate no is already reg or not
-                const checkPlateNo = await Drivers.findOne({"vehicleDetails.plateNo": plateNo , _id: { $ne: id } })
+                const checkPlateNo = await Drivers.findOne({
+                    "vehicleDetails.plateNo": plateNo,
+                    _id: {
+                        $ne: id
+                    }
+                })
                 if (checkPlateNo) {
                     return res.status(201).json({
                         success: false,
@@ -605,8 +810,10 @@ const updateDriverCarDetails = async (req, res) => {
 }
 
 // uodate Driver payment details
-const updateDriverPaymentDetails = async (req, res) => {
-    const {id} = req.params
+const addDriverPaymentDetails = async (req, res) => {
+    const {
+        id
+    } = req.params
     const {
         bankName,
         accountNo,
@@ -637,7 +844,12 @@ const updateDriverPaymentDetails = async (req, res) => {
         } else {
             try {
                 // chceking if account no already exists or not
-                const checkAccountNo = await Drivers.findOne({"paymentDetails.accountNo" : accountNo , _id: { $ne: id } })
+                const checkAccountNo = await Drivers.findOne({
+                    "paymentDetails.accountNo": accountNo,
+                    _id: {
+                        $ne: id
+                    }
+                })
                 if (checkAccountNo) {
                     return res.status(201).json({
                         success: false,
@@ -654,7 +866,7 @@ const updateDriverPaymentDetails = async (req, res) => {
                 req.body.paymentDetails = {}
                 req.body.paymentDetails = paymentDetails;
 
-                const updatedUser = await Drivers.findByIdAndUpdate(id, {
+                await Drivers.findByIdAndUpdate(id, {
                     $set: req.body
                 }, {
                     new: true
@@ -664,9 +876,9 @@ const updateDriverPaymentDetails = async (req, res) => {
                 })
 
             } catch (error) {
-                console.log("Error in updateDriverPaymentDetails and error is : ", error)
+                console.log("Error in addDriverPaymentDetails and error is : ", error)
                 return res.status(504).json({
-                    message: '!!! Opps An Error Occured !!!',
+                    message: 'Opps An Error Occured',
                     success: false
                 })
             }
@@ -674,9 +886,52 @@ const updateDriverPaymentDetails = async (req, res) => {
     }
 }
 
-// uodate Driver Profile
+// get Driver payment details
+const getDriverPaymentDetails = async (req, res) => {
+    const {
+        id
+    } = req.params
+
+    if (!id) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required'
+        })
+    } else {
+        const isExist = await Drivers.findById(id, {
+            paymentDetails: 1,
+            _id: 0
+        })
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+                res.status(201).json({
+                    success: true,
+                    BankName: isExist.paymentDetails.bankName,
+                    AccountNo: isExist.paymentDetails.accountNo,
+                    Account_Holder_Name: isExist.paymentDetails.acctHolderName,
+                })
+
+            } catch (error) {
+                console.log("Error in getDriverPaymentDetails and error is : ", error)
+                return res.status(504).json({
+                    message: 'Opps An Error Occured',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// uodate Driver Profile Pic or Info
 const updateDriverProfile = async (req, res) => {
-    const {id} = req.params
+    const {
+        id
+    } = req.params
     // checking sent file is image or not
     if (req.file) {
         // checking id card front image
@@ -689,13 +944,13 @@ const updateDriverProfile = async (req, res) => {
     }
 
 
-    if (!id ) {
+    if (!id) {
         return res.status(504).json({
             success: false,
             message: 'Id is Required for Updation'
         })
     } else {
-        const isExist = await Drivers.findById(id)
+        let isExist = await Drivers.findById(id)
         if (!isExist) {
             return res.status(201).json({
                 success: false,
@@ -706,12 +961,20 @@ const updateDriverProfile = async (req, res) => {
                 // uploading user profile iamge to multer
                 if (req.file) {
                     // updating profile pic
-                    req.body.profilePic = "";
-                    req.body.profilePic = req.file.filename.toLowerCase()
+                    isExist.profilePic = "";
+                    isExist.profilePic = URL + "/driverPics/" + req.file.filename.toLowerCase()
+                }
+
+                if (req.body.firstName) {
+                    isExist.firstName = req.body.firstName;
+                }
+
+                if (req.body.lastName) {
+                    isExist.lastName = req.body.lastName;
                 }
 
                 await Drivers.findByIdAndUpdate(id, {
-                    $set: req.body
+                    $set: isExist
                 }, {
                     new: true
                 })
@@ -720,7 +983,51 @@ const updateDriverProfile = async (req, res) => {
                 })
 
             } catch (error) {
-                console.log("Error in updateDriver and error is : ", error)
+                console.log("Error in updateDriverProfile and error is : ", error)
+                return res.status(504).json({
+                    message: '!!! Opps An Error Occured !!!',
+                    success: false
+                })
+            }
+        }
+    }
+}
+
+// get Driver Profile Pic or Info
+const getDriverProfile = async (req, res) => {
+    const {
+        id
+    } = req.params
+    if (!id) {
+        return res.status(504).json({
+            success: false,
+            message: 'Id is Required for Updation'
+        })
+    } else {
+        const isExist = await Drivers.findById(id, {
+            firstName: 1,
+            lastName: 1,
+            profilePic: 1,
+            _id: 0
+        })
+        if (!isExist) {
+            return res.status(201).json({
+                success: false,
+                message: 'Driver Id is Incorrect '
+            })
+        } else {
+            try {
+                res.status(201).json({
+                    success: true,
+                    Details: {
+                        FirstName: isExist.firstName,
+                        LastName: isExist.lastName,
+                        ProfilePic: isExist.profilePic,
+                    }
+                })
+
+            } catch (error) {
+                console.log("Error in getDriverProfile and error is : ", error)
                 return res.status(504).json({
                     message: '!!! Opps An Error Occured !!!',
                     success: false
@@ -732,7 +1039,9 @@ const updateDriverProfile = async (req, res) => {
 
 // Adding new vehcle
 const addNewVehicle = async (req, res) => {
-    const {id} = req.params
+    const {
+        id
+    } = req.params
     const {
         vehicleType,
         plateNo,
@@ -751,7 +1060,7 @@ const addNewVehicle = async (req, res) => {
     }
 
 
-    if (!id || !vehicleType || !plateNo || !plateCode || !yearOfManuf || !companyOfManuf || !vehicleColor ) {
+    if (!id || !vehicleType || !plateNo || !plateCode || !yearOfManuf || !companyOfManuf || !vehicleColor) {
         return res.status(504).json({
             success: false,
             message: 'Please provide all Requred Credientials'
@@ -761,34 +1070,35 @@ const addNewVehicle = async (req, res) => {
         if (!isExist) {
             return res.status(201).json({
                 success: false,
-                message: 'Driver Id is Incorrect '
+                message: 'Driver Id is Incorrect'
             })
         } else {
             try {
 
                 // chceking if vehicle with same plate no is already reg or not
-                const checkPlateNo = await Drivers.findOne({"vehicleDetails.plateNo": plateNo })
-                if (checkPlateNo) {
+                const checkPlateNo = await Vehicles.find({
+                    plateNo: plateNo
+                })
+                if (checkPlateNo.length > 0) {
                     return res.status(201).json({
                         success: false,
                         message: 'Vehicle with Same Plate No is Already Registered'
                     })
                 }
 
-                // adding vehhicles details
-                let vehicleDetails = {};
-                vehicleDetails.vehicleType = vehicleType;
-                vehicleDetails.plateNo = plateNo;
-                vehicleDetails.plateCode = plateCode;
-                vehicleDetails.yearOfManuf = yearOfManuf;
-                vehicleDetails.companyOfManuf = companyOfManuf;
-                vehicleDetails.vehicleColor = vehicleColor;
+                let newVehicle = new Vehicles({
+                    owner: id,
+                    ...req.body
+                })
 
-                isExist.vehicleDetails.push(vehicleDetails);
+                const addedVehicle = await newVehicle.save();
 
 
-                const updatedUser = await Drivers.findByIdAndUpdate(id, {
-                    $set: isExist
+                // updating driver modal
+                await Drivers.findByIdAndUpdate(id, {
+                    $push: {
+                        vehicleDetails: addedVehicle._id
+                    }
                 }, {
                     new: true
                 })
@@ -807,13 +1117,15 @@ const addNewVehicle = async (req, res) => {
     }
 }
 
-
-// uodate Driver location
+// uodate Driver location / show active
 const updateDriverLocation = async (req, res) => {
     const {
         id
     } = req.params
-    const {curntLoc , currentAddress} = req.body;
+    const {
+        curntLoc,
+        currentAddress
+    } = req.body;
 
     // checking if user has sent any data for updating or not
     if ((Object.keys(req.body).length === 0)) {
@@ -829,18 +1141,18 @@ const updateDriverLocation = async (req, res) => {
             message: 'Please Provide All Required Credientials'
         })
     } else {
-        let  isExist = await Drivers.findById(id)
+        let isExist = await Drivers.findById(id)
         if (!isExist) {
             return res.status(201).json({
                 success: false,
-                message: 'Customer Id is Incorrect'
+                message: 'Driver Id is Incorrect'
             })
         } else {
             try {
-                if (isExist.verifyStatus === false){
+                if (isExist.verifyStatus === false) {
                     return res.status(201).json({
                         success: false,
-                        message: 'Sorry Could Not Place Order as this Driver has not been Verified By this App yet'
+                        message: 'Sorry Action Could Not be Performed as  Driver has not been Verified By this App yet'
                     })
                 }
                 isExist.curntLoc = curntLoc;
@@ -867,10 +1179,11 @@ const updateDriverLocation = async (req, res) => {
     }
 }
 
-
 // uodate Driver Notifictions
 const getDriverNotifications = async (req, res) => {
-    const {id} = req.params
+    const {
+        id
+    } = req.params
 
     if (!id) {
         return res.status(504).json({
@@ -879,6 +1192,14 @@ const getDriverNotifications = async (req, res) => {
         })
     } else {
         let isExist = await Drivers.findById(id);
+        const newDate = new Date()
+        const msToTime = (ms) => ({
+            hours: Math.trunc(ms / 3600000),
+            minutes: Math.trunc((ms / 3600000 - Math.trunc(ms / 3600000)) * 60) + ((ms / 3600000 - Math.trunc(ms / 3600000)) * 60 % 1 != 0 ? 1 : 0)
+        })
+
+        // Update header text
+        //const res = msToTime(newDate - oldDate)
         if (!isExist) {
             return res.status(201).json({
                 success: false,
@@ -894,11 +1215,25 @@ const getDriverNotifications = async (req, res) => {
                     {
                         $lookup: {
                             from: 'oturqapporders',
-                            localField: 'availOrders',
+                            localField: 'completedOrders',
                             foreignField: '_id',
                             as: 'availOrders'
                         },
                     },
+                    {
+                        $unwind: "$availOrders"
+                    },
+                    {
+                        $project: {
+                            _id: "$availOrders._id",
+                            orderId: "$availOrders.orderId",
+                            myCheck: "$check.hours",
+                            estimatedTime: "$availOrders.timeAlloted",
+                            extimatedPrice: "$availOrders.priceOfOrder",
+                            pickUpAddress: "$availOrders.pickUpAddress",
+                            dropAddress: "$availOrders.dropAddress",
+                        }
+                    }
                 ]).sort({
                     availOrders: 0
                 });
@@ -922,7 +1257,9 @@ const getDriverNotifications = async (req, res) => {
 
 // get newly Got Order Request from Customer
 const getNewlyGotOrderReqs = async (req, res) => {
-    const {id} = req.params
+    const {
+        id
+    } = req.params
 
     if (!id) {
         return res.status(504).json({
@@ -951,6 +1288,19 @@ const getNewlyGotOrderReqs = async (req, res) => {
                             as: 'gotResponseFromCust'
                         },
                     },
+                    {
+                        $unwind: "$gotResponseFromCust"
+                    },
+                    {
+                        $project: {
+                            _id: "$_id",
+                            OrderId: "$gotResponseFromCust._id",
+                            Extimated_Time: "$gotResponseFromCust.timeAlloted",
+                            Price: "$gotResponseFromCust.priceOfOrder",
+                            pickUpAddress: "$gotResponseFromCust.pickUpAddress",
+                            dropAddress: "$gotResponseFromCust.dropAddress",
+                        }
+                    }
                 ]).sort({
                     gotResponseFromCust: 0
                 });
@@ -958,7 +1308,8 @@ const getNewlyGotOrderReqs = async (req, res) => {
 
                 res.status(201).json({
                     success: true,
-                    newNotification
+                    newNotification,
+                    message: "This Order has Approved Your Request, Now are you ready for this Shipment?"
                 })
 
             } catch (error) {
@@ -971,7 +1322,6 @@ const getNewlyGotOrderReqs = async (req, res) => {
         }
     }
 }
-
 
 // Stripe Payments
 const makeStripePayment = async (req, res) => {
@@ -1157,299 +1507,27 @@ const makeStripePayment = async (req, res) => {
     }
 }
 
-// get all Users subscribed playlists
-const getSubPlayLists = async (req, res) => {
-    const {
-        id
-    } = req.params;
-    try {
-        const allPlayLists = await Users.aggregate([{
-                $match: {
-                    _id: mongoose.Types.ObjectId(id),
-                },
-            },
-            {
-                $lookup: {
-                    from: 'lmsapptopics',
-                    localField: 'puchasedPlayList.id',
-                    foreignField: '_id',
-                    as: 'puchasedPlayList'
-                },
-            },
-        ]).sort({
-            puchasedPlayList: 0
-        });
-        if (allPlayLists === null) {
-            return res.json({
-                success: false,
-                message: 'No Users Found ',
-            });
-        } else {
-            return res.json({
-                allPlayLists,
-                success: true,
-                message: 'Got Result ',
-            });
-        }
-    } catch (error) {
-        console.log("Error in getSubPlayLists and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-
-///    Admin     Operations      /////
-
-
-
-
-// get all Users
-const getAllUsers = async (req, res) => {
-    try {
-        const allUsers = await Users.find({}, {
-            password: 0,
-            otpCode: 0,
-            codeSentTime: 0,
-            orders: 0,
-            updatedAt: 0,
-            __v: 0
-        });
-        if (!allUsers) {
-            return res.json({
-                success: false,
-                message: 'No User Found ',
-            });
-        } else {
-            return res.json({
-                allUsers,
-                success: true,
-            });
-        }
-    } catch (error) {
-        console.log("Error in getAllUsers and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-// get single User for admin
-const getSingleUserAmdin = async (req, res) => {
-    const {
-        id
-    } = req.params;
-    try {
-        const singleUser = await Users.findById(id, {
-            password: 0,
-            otpCode: 0,
-            codeSentTime: 0,
-            orders: 0,
-            updatedAt: 0,
-            __v: 0
-        });
-        if (!singleUser) {
-            return res.json({
-                success: false,
-                message: 'No User Found ',
-            });
-        } else {
-            return res.json({
-                singleUser,
-                success: true,
-            });
-        }
-    } catch (error) {
-        console.log("Error in getSingleUserAmdin and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-// get all Recent Users
-const getRecentUsers = async (req, res) => {
-    try {
-        const allUsers = await Users.find({}).limit(4);
-        if (!allUsers) {
-            return res.json({
-                success: false,
-                message: 'No Users Found ',
-            });
-        } else {
-            return res.json({
-                allUsers,
-                success: true
-            });
-        }
-    } catch (error) {
-        console.log("Error in getRecentUsers and error is : ", error)
-        return res.json({
-            error,
-            success: false
-        });
-    }
-}
-
-// get Single Users
-const getSingleUser = async (req, res) => {
-    const {
-        id
-    } = req.params;
-
-    try {
-        const singleUser = await Users.findById(id, {
-            otpCode: 0,
-            codeSentTime: 0,
-            puchasedPlayList: 0,
-            orders: 0,
-            createdAt: 0,
-            updatedAt: 0,
-            __v: 0
-        })
-
-        if (!singleUser) {
-            return res.json({
-                success: false,
-                message: 'No User Found ',
-            });
-        } else {
-            return res.json({
-                singleUser,
-                success: true,
-            });
-        }
-    } catch (error) {
-        console.log("Error in getSingleUser and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-// get Single Users Orders Only
-const getUsersOrders = async (req, res) => {
-    const {
-        id
-    } = req.params;
-
-    try {
-        const allOrders = await Users.findById(id, {
-            _id: 0,
-            orders: 1
-        })
-
-        if (allOrders === null) {
-            return res.json({
-                success: false,
-                message: 'No Order Found ',
-            });
-        } else {
-            return res.json({
-                allOrders,
-                success: true,
-            });
-        }
-    } catch (error) {
-        console.log("Error in getUsersOrders and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-// get all Users Count
-const getAllUsersCount = async (req, res) => {
-    try {
-        const count = await Users.find({}).count();
-        if (!count) {
-            return res.json({
-                success: false,
-                message: 'No User Found ',
-            });
-        } else {
-            return res.json({
-                count,
-                success: true,
-            });
-        }
-    } catch (error) {
-        console.log("Error in getAllUsersCount and error is : ", error)
-        return res.json({
-            error,
-            success: false,
-        });
-    }
-}
-
-
-// delete User
-const deleteUser = async (req, res) => {
-    const {
-        id
-    } = req.params;
-    try {
-        const gotUser = await Users.findById(id);
-        if (!gotUser) {
-            return res.status(201).json({
-                success: false,
-                message: "No User Found "
-            })
-        } else {
-            // checking if user has any playlist subscription remaining or not
-            if (gotUser.puchasedPlayList.length > 0) {
-                const curentDate = new Date()
-                for (let i = 0; i !== gotUser.puchasedPlayList.length; i++) {
-                    if (gotUser.puchasedPlayList[i].endDate > curentDate) {
-                        return res.status(403).json({
-                            success: false,
-                            message: "Sorry, but yu can not delete this User, as User has a Subscription End Date for a PlayList which is greater than Current date. Thanks"
-                        })
-                    }
-                }
-            }
-
-            const deletedUser = await Users.findByIdAndDelete(id);
-            if (!deletedUser) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'User Not Found ',
-                });
-            } else {
-                return res.status(200).json({
-                    success: true,
-                });
-            }
-        }
-    } catch (error) {
-        console.log("Error in deleteUser and error is : ", error)
-        return res.status(504).json({
-            success: false,
-        });
-    }
-}
 
 
 module.exports = {
-    addNewUser,
+    signInDriver,
     LogInUser,
     updateUserStatus,
-    updateDriver,
-    updateDriverDetails,
+    addDriverDocs,
+    addDriverDetails,
     addNewVehicle,
     updateDriverLocation,
     getDriverNotifications,
     getNewlyGotOrderReqs,
     updateDriverCarDetails,
-    updateDriverPaymentDetails,
+    addDriverPaymentDetails,
     getDriverPersonelDetails,
     getDriverVehiclesDetails,
     getDriverSingleVehicleDetails,
     updateDriverProfile,
+    updateDriverSingleVehicleDetails,
+    getDriverDocs,
+    updateDriverDetails,
+    getDriverPaymentDetails,
+    getDriverProfile,
 }

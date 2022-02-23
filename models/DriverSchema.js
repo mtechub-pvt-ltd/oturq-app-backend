@@ -13,6 +13,14 @@ const DriverSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    firstName: {
+        type: String,
+        default: ''
+    },
+    lastName: {
+        type: String,
+        default: ''
+    },
     familyName: {
         type: String,
         default: ''
@@ -29,32 +37,12 @@ const DriverSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
-    vehicleDetails : [{
-        vehicleType : {
-            type: String,
-            default : ''
-        },
-        plateNo: {
-            type: String,
-            default : ''
-        },
-        plateCode: {
-            type: String,
-            default : ''
-        },
-        yearOfManuf: {
-            type: String,
-            default : ''
-        },
-        companyOfManuf: {
-            type: String,
-            default : ''
-        },
-        vehicleColor: {
-            type: String,
-            default : ''
-        },
-    }],
+    vehicleDetails : [
+        {
+            type: mongoose.Types.ObjectId,
+            ref: 'oturqappvehicles',
+        }
+    ],
     paymentDetails: {
         _id : false,
         bankName: {
@@ -134,6 +122,10 @@ const DriverSchema = new mongoose.Schema({
     activeStatus: { // location of driver
         type: Boolean,
         default : false
+    },
+    pushNotification: {
+        type: String,
+        default: ''
     },
     gotResponseFromCust : [{
         type: mongoose.Types.ObjectId,
