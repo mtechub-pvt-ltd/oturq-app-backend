@@ -2,11 +2,17 @@ const Customers = require('../models/CustomerSchema')
 const Drivers = require('../models/DriverSchema')
 const Orders = require('../models/OrderSchema')
 const Vehicles = require('../models/VehicleSchema')
+const Admins = require('../models/AdminSchema')
 const mongoose = require("mongoose")
 const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY;
 const stripe = require('stripe')(process.env.Stripe_Secret_key)
+const ThawaniClient = require('thawani-node')
 const URL = "http://localhost:8080"
-
+const api = new ThawaniClient({
+    secretKey: process.env.Thawani_Publisable,
+    publishableKey: process.env.Thawani_Secret,
+    dev: true, // false to set it for production
+});
 
 // adding new order
 const addNewOrder = async (req, res) => {
@@ -24,10 +30,80 @@ const addNewOrder = async (req, res) => {
         customerNotes
     } = req.body;
 
+    // checking if sent files are of image type or not
+    if (!req.files && !req.file) {
+        return res.json({
+            success: false,
+            message: "You Can Not Post Order Images Here"
+        });
+    }
+
+    if (!postedBy || !vehicleType || !pickUpLoc || !dropLoc || !pickUpAddress || !dropAddress || !priceOfOrder || !timeAlloted) {
+        return res.json({
+            message: "Please fill All required credentials"
+        });
+    } else {
+        // checking if any order already pending
+        const checkOrder = await Orders.findOne({
+            postedBy: postedBy,
+            status: false
+        });
+        if (checkOrder) {
+            return res.status(201).json({
+                success: false,
+                message: 'You Can Not Post Any other Order , As One Your Order is Being under process. Thanks'
+            })
+        }
+
+        const newOrder = new Orders({
+            ...req.body
+        })
+        try {
+            const addedOrder = await newOrder.save();
+            const id = addedOrder._id.toString();
+
+            // sending request to online drivers in 10 km radius
+            let check = await sendDriverNotifications(pickUpLoc[0], pickUpLoc[1], vehicleType, id)
+
+            if (check !== "Done") {
+                return res.status(504).json({
+                    success: true,
+                    message: 'Order Has Been Posted , But no Driver Found in Your Destination'
+                })
+            }
+
+            return res.status(201).json({
+                success: true,
+                OrderId: id,
+                message: 'Order Placed SuccessFully, Please wait for Drivers Response.Thanks'
+            })
+
+        } catch (error) {
+            console.log("Error in addNewOrder and error is : ", error)
+        }
+    }
+}
+
+// adding new order
+const addOrderImages = async (req, res) => {
+    const {
+        id
+    } = req.params;
 
     // checking if sent files are of image type or not
+    if (!req.files && !req.file) {
+        for (let i = 0; i != req.files.length; i++) {
+            if ((req.files[i].mimetype !== "image/jpeg" && req.files[i].mimetype !== "image/jpg" && req.files[i].mimetype !== "image/webP" && req.files[i].mimetype !== "image/png")) {
+                return res.json({
+                    success: false,
+                    message: "No Order Images Found"
+                });
+            }
+        }
+    }
+    // checking if sent files are of image type or not
     if (req.files) {
-        for (let i = 0; i != req.files.length; i++){
+        for (let i = 0; i != req.files.length; i++) {
             if ((req.files[i].mimetype !== "image/jpeg" && req.files[i].mimetype !== "image/jpg" && req.files[i].mimetype !== "image/webP" && req.files[i].mimetype !== "image/png")) {
                 return res.json({
                     success: false,
@@ -37,88 +113,122 @@ const addNewOrder = async (req, res) => {
         }
     }
 
-
-    if (!postedBy || !vehicleType || !pickUpLoc || !dropLoc || !pickUpAddress || !dropAddress || !priceOfOrder || !timeAlloted  ) {
-        return res.json({message : "Please fill All required credentials"});
-    }else{
-        // checking if any order already pending
-        const checkOrder = await Orders.findOne({ postedBy : postedBy , status : false });
-        if (checkOrder){
-            return res.status(201).json({
+    // checking if sent file are of image type or not
+    if (req.file) {
+        if ((req.file.mimetype !== "image/jpeg" && req.file.mimetype !== "image/jpg" && req.file.mimetype !== "image/webP" && req.file.mimetype !== "image/png")) {
+            return res.json({
                 success: false,
-                message: 'You Can Not Post Any other Order , As One Your Order is Being under process. Thanks'
-            })
+                message: "Order Image Not Found"
+            });
         }
+    }
 
-        req.body.images = []
+    // checking if any order already pending
+    const checkOrder = await Orders.findById(id);
+    if (!checkOrder) {
+        return res.status(201).json({
+            success: false,
+            message: 'Order Not Found'
+        })
+    }
+
+    let orderImages = []
+    if (req.files) {
         for (let i = 0; i !== req.files.length; i++) {
             var lower = req.files[i].filename.toLowerCase();
             let newLower = URL + "/ordersPics/" + lower
-            req.body.images.push(newLower);
+            orderImages.push(newLower);
         }
-
-        const newOrder = new Orders({ ...req.body })
-        try {
-            const addedOrder = await newOrder.save();
-            const id = addedOrder._id.toString();
-
-            // sending request to online drivers in 10 km radius
-            let check = await sendDriverNotifications(pickUpLoc[0], pickUpLoc[1], vehicleType , id)
-
-            if (check !== "Done") {
-                return res.status(504).json({
-                    success: true,
-                    message: 'Order Has Been Posted , But no Driver Found in Your Destination'
-                })
+    } else if (req.file) {
+        var lower = req.file.filename.toLowerCase();
+        let newLower = URL + "/ordersPics/" + lower
+        orderImages.push(newLower);
+    }
+    try {
+        const updateOrder = await Orders.findByIdAndUpdate(id, {
+            $set: {
+                images: orderImages
             }
+        }, {
+            new: true
+        })
 
-            return res.status(201).json({success: true,  message: 'Order Placed SuccessFully, Please wait for Drivers Response.Thanks' })
+        return res.status(201).json({
+            success: true,
+            message: 'Order Images Added SuccessFully'
+        })
 
-        }catch (error) {
-            console.log("Error in addNewOrder and error is : ", error)
-        }
+    } catch (error) {
+        console.log("Error in addNewOrder and error is : ", error)
+        return res.status(201).json({
+            success: false,
+            message: 'Order Images Could Not be Added'
+        })
     }
 }
 
 // get all active cutomers in loc bewteen
-const sendDriverNotifications = async (lat1, long1, myVehicleType , id) => {
+const sendDriverNotifications = async (lat1, long1, myVehicleType, id) => {
     var distance;
     try {
         //getting active drivers first
-        const allDrivers = await Drivers.find({activeStatus : true}); // getting only online drivers
+        const allDrivers = await Drivers.find({
+            activeStatus: true
+        }); // getting only online drivers
         let AllDrivers = [];
         // checking which active driver has vehicle same as mercehent wants
-        for (let u = 0; u !== allDrivers.length; u++){
-            let driver = await Vehicles.findOne({owner : allDrivers[u]._id , vehicleType : myVehicleType});
-            if (driver){
+        for (let u = 0; u !== allDrivers.length; u++) {
+            let driver = await Vehicles.findOne({
+                owner: allDrivers[u]._id,
+                vehicleType: myVehicleType
+            });
+            if (driver) {
                 const singleDri = await Drivers.findById(allDrivers[u]._id); // getting only online drivers
                 AllDrivers.push(singleDri)
             }
         }
         // sending request to finalized drivers
-        if (AllDrivers.length > 0){
+        if (AllDrivers.length > 0) {
             for (var i = 0; i !== AllDrivers.length; i++) {
                 distance = await calcCrow(lat1, long1, AllDrivers[i].curntLoc[0], AllDrivers[i].curntLoc[1]);
-                if(distance < 10){ // puts drivers which are less than 10 km in array
-                    await Drivers.findByIdAndUpdate(AllDrivers[i]._id ,{ $push : {availOrders : id }  }  , {new: true} )
-                    await Orders.findByIdAndUpdate(id ,{ $push : {availDrivers : AllDrivers[i]._id }  }  , {new: true} )
+                if (distance < 10) { // puts drivers which are less than 10 km in array
+                    await Drivers.findByIdAndUpdate(AllDrivers[i]._id, {
+                        $push: {
+                            availOrders: id
+                        }
+                    }, {
+                        new: true
+                    })
+                    await Orders.findByIdAndUpdate(id, {
+                        $push: {
+                            availDrivers: AllDrivers[i]._id
+                        }
+                    }, {
+                        new: true
+                    })
                 }
                 console.log("distance : ", distance)
             }
             return "Done";
-        }else{
+        } else {
             return "Sorry , No Driver Found In Your Region"
         }
-  }catch (e) {
-    console.log("Errr  is : ", e.message);
-    return "Not Done"
-  }
+    } catch (e) {
+        console.log("Errr  is : ", e.message);
+        return "Not Done"
+    }
 }
 
 // adding driver responses
-const addDriversReponses = async (req,res) => {
-    const {id} = req.params;
-    const {price, estTime , orderId} = req.body;
+const addDriversReponses = async (req, res) => {
+    const {
+        id
+    } = req.params;
+    const {
+        price,
+        estTime,
+        orderId
+    } = req.body;
 
     // checking if user has sent any data for updating or not
     if ((Object.keys(req.body).length === 0)) {
@@ -133,16 +243,16 @@ const addDriversReponses = async (req,res) => {
             success: false,
             message: 'Please fill all Required Credientials'
         })
-    }else{
+    } else {
         try {
             let gotOrder = await Orders.findById(orderId);
-            if (!gotOrder){
+            if (!gotOrder) {
                 return res.status(201).json({
                     success: false,
                     message: 'Order Not Found'
                 })
-            }else{
-                if(gotOrder.status === true){
+            } else {
+                if (gotOrder.status === true) {
                     return res.status(201).json({
                         success: true,
                         message: 'Sorry, Could Not Send Request as Order has been Started by Some on Else'
@@ -155,14 +265,18 @@ const addDriversReponses = async (req,res) => {
 
                 gotOrder.respondedDrivers.push(respondedDrivers)
 
-                await Orders.findByIdAndUpdate(orderId ,{ $set : gotOrder }  , {new: true} )
+                await Orders.findByIdAndUpdate(orderId, {
+                    $set: gotOrder
+                }, {
+                    new: true
+                })
 
                 return res.status(201).json({
                     success: true,
                     message: 'Request Sent To Merchent SuccessFully'
                 })
             }
-        }catch (e) {
+        } catch (e) {
             console.log("Errr  is : ", e.message);
             return res.status(201).json({
                 success: true,
@@ -174,15 +288,17 @@ const addDriversReponses = async (req,res) => {
 }
 
 // getting driver responses
-const getDriversReponses = async (req,res) => {
-    const {id} = req.params;
+const getDriversReponses = async (req, res) => {
+    const {
+        id
+    } = req.params;
 
     if (!id) {
         return res.status(201).json({
             success: false,
             message: 'Order Id Not Found'
         })
-    }else{
+    } else {
         try {
             let responses = await Orders.aggregate([{
                     $match: {
@@ -197,20 +313,22 @@ const getDriversReponses = async (req,res) => {
                         as: 'respondedDriver'
                     },
                 },
-                {$unwind: "$respondedDriver"},
-                    {
-                        $project: {
-                            _id: "$respondedDriver._id",
-                            name: "$respondedDriver.name",
-                            //rating: "$respondedDriver.rating",
-                            OfferedPrice  : "$respondedDrivers.price",
-                            EstimatedTime: "$respondedDrivers.estTime",
-                            picture: "$respondedDriver.profilePic",
-                            // extimatedPrice : "$respondedDrivers.priceOfOrder",
-                            // pickUpAddress: "$respondedDrivers.pickUpAddress",
-                            // dropAddress: "$respondedDrivers.dropAddress",
-                        }
+                {
+                    $unwind: "$respondedDriver"
+                },
+                {
+                    $project: {
+                        _id: "$respondedDriver._id",
+                        name: "$respondedDriver.name",
+                        //rating: "$respondedDriver.rating",
+                        OfferedPrice: "$respondedDrivers.price",
+                        EstimatedTime: "$respondedDrivers.estTime",
+                        picture: "$respondedDriver.profilePic",
+                        // extimatedPrice : "$respondedDrivers.priceOfOrder",
+                        // pickUpAddress: "$respondedDrivers.pickUpAddress",
+                        // dropAddress: "$respondedDrivers.dropAddress",
                     }
+                }
             ]).sort({
                 respondedDrivers: 0
             });
@@ -220,7 +338,7 @@ const getDriversReponses = async (req,res) => {
                 responses,
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -232,8 +350,11 @@ const getDriversReponses = async (req,res) => {
 }
 
 // accepting Driver's Request
-const acceptDriverRequest = async (req,res) => {
-    const {id , driverId} = req.params;
+const acceptDriverRequest = async (req, res) => {
+    const {
+        id,
+        driverId
+    } = req.params;
 
 
     if (!id || !driverId) {
@@ -241,7 +362,7 @@ const acceptDriverRequest = async (req,res) => {
             success: false,
             message: 'Please Provide All Required Credientials'
         })
-    }else{
+    } else {
         try {
             const gotOrder = await Orders.findById(id);
             if (!gotOrder) {
@@ -252,7 +373,7 @@ const acceptDriverRequest = async (req,res) => {
             }
 
             let gotDriver = await Drivers.findById(driverId);
-            if (!gotDriver){
+            if (!gotDriver) {
                 return res.status(404).json({
                     success: false,
                     message: 'Driver Not Found'
@@ -260,16 +381,20 @@ const acceptDriverRequest = async (req,res) => {
             }
             gotDriver.gotResponseFromCust.push(id)
 
-            await Drivers.findByIdAndUpdate(driverId ,{ $set : gotDriver }  , {new: true} )
+            await Drivers.findByIdAndUpdate(driverId, {
+                $set: gotDriver
+            }, {
+                new: true
+            })
 
 
 
             return res.status(201).json({
                 success: true,
-                message : "Response Sent to Driver SuccessFully"
+                message: "Response Sent to Driver SuccessFully"
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr in acceptDriverRequest and error  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -281,8 +406,11 @@ const acceptDriverRequest = async (req,res) => {
 }
 
 //  Driver accepting order
-const orderAcceptByDriver = async (req,res) => {
-    const {id , driverId} = req.params;
+const orderAcceptByDriver = async (req, res) => {
+    const {
+        id,
+        driverId
+    } = req.params;
 
 
     if (!id || !driverId) {
@@ -290,7 +418,7 @@ const orderAcceptByDriver = async (req,res) => {
             success: false,
             message: 'Please Provide All Required Credientials'
         })
-    }else{
+    } else {
         try {
             const gotOrder = await Orders.findById(id);
             if (!gotOrder) {
@@ -301,13 +429,13 @@ const orderAcceptByDriver = async (req,res) => {
             }
 
             let gotDriver = await Drivers.findById(driverId);
-            if (!gotDriver){
+            if (!gotDriver) {
                 return res.status(404).json({
                     success: false,
                     message: 'Driver Not Found'
                 })
             }
-            if(gotOrder.status === true){
+            if (gotOrder.status === true) {
                 return res.status(201).json({
                     success: false,
                     message: 'Order has Already Been Started'
@@ -316,24 +444,39 @@ const orderAcceptByDriver = async (req,res) => {
             gotOrder.status = true;
             gotOrder.recieverId = driverId;
             gotOrder.orderStatus = "Arriving";
-            await Orders.findByIdAndUpdate(id ,{ $set : gotOrder }  , {new: true} )
+            await Orders.findByIdAndUpdate(id, {
+                $set: gotOrder
+            }, {
+                new: true
+            })
 
             gotDriver.pendingOrders.push(id)
-            await Drivers.findByIdAndUpdate(driverId ,{ $set : gotDriver }  , {new: true} )
+            gotDriver.ordersRecieved += 1;
+            await Drivers.findByIdAndUpdate(driverId, {
+                $set: gotDriver
+            }, {
+                new: true
+            })
 
             // pulling our order from avail drivers notifications
-            for (let i = 0; i !== gotOrder.availDrivers.length; i++){
+            for (let i = 0; i !== gotOrder.availDrivers.length; i++) {
                 //console.log("gotOrder.availDrivers[i] : ", gotOrder.availDrivers[i])
-                await Drivers.findByIdAndUpdate(gotOrder.availDrivers[i] ,{ $pull : {availOrders : id }  }  , {new: true} )
+                await Drivers.findByIdAndUpdate(gotOrder.availDrivers[i], {
+                    $pull: {
+                        availOrders: id
+                    }
+                }, {
+                    new: true
+                })
             }
 
 
             return res.status(201).json({
                 success: true,
-                message : "Order has Been Started"
+                message: "Order has Been Started"
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr in orderAcceptByDriver and error  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -345,15 +488,18 @@ const orderAcceptByDriver = async (req,res) => {
 }
 
 //  order collected by driver
-const orderCollctedByDriver = async (req,res) => {
-    const {id , recievedBy} = req.params;
+const orderCollctedByDriver = async (req, res) => {
+    const {
+        id,
+        recievedBy
+    } = req.params;
 
     if (!id || !recievedBy) {
         return res.status(403).json({
             success: false,
             message: 'Please Provide All Required Credientials'
         })
-    }else{
+    } else {
         try {
             let gotDriver = await Drivers.findById(recievedBy);
             if (!gotDriver) {
@@ -363,7 +509,10 @@ const orderCollctedByDriver = async (req,res) => {
                 })
             }
 
-            let gotOrder = await Orders.findOne({_id : id , recievedBy : recievedBy});
+            let gotOrder = await Orders.findOne({
+                _id: id,
+                recievedBy: recievedBy
+            });
             if (!gotOrder) {
                 return res.status(404).json({
                     success: false,
@@ -381,14 +530,18 @@ const orderCollctedByDriver = async (req,res) => {
             gotOrder.orderStatus = "Collected";
 
 
-            await Orders.findByIdAndUpdate(id ,{ $set : gotOrder }  , {new: true} )
+            await Orders.findByIdAndUpdate(id, {
+                $set: gotOrder
+            }, {
+                new: true
+            })
 
             return res.status(201).json({
                 success: true,
-                message : "Order Has Been Collected By Driver"
+                message: "Order Has Been Collected By Driver"
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr in deleteSingeleOrder and error  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -400,16 +553,21 @@ const orderCollctedByDriver = async (req,res) => {
 }
 
 //  Change order status time by time
-const changeOrderStatus = async (req,res) => {
-    const {id , driverId} = req.params;
-    const {orderStatus} = req.body;
+const changeOrderStatus = async (req, res) => {
+    const {
+        id,
+        driverId
+    } = req.params;
+    const {
+        orderStatus
+    } = req.body;
 
     if (!id || !driverId || !orderStatus) {
         return res.status(403).json({
             success: false,
             message: 'Please Provide All Required Credientials'
         })
-    }else{
+    } else {
         try {
             let gotDriver = await Drivers.findById(driverId);
             if (!gotDriver) {
@@ -419,7 +577,10 @@ const changeOrderStatus = async (req,res) => {
                 })
             }
 
-            const gotOrder = await Orders.findOne({_id : id , recieverId : driverId});
+            const gotOrder = await Orders.findOne({
+                _id: id,
+                recieverId: driverId
+            });
             if (!gotOrder) {
                 return res.status(404).json({
                     success: false,
@@ -427,7 +588,7 @@ const changeOrderStatus = async (req,res) => {
                 })
             }
 
-            if(gotOrder.status === false){
+            if (gotOrder.status === false) {
                 return res.status(201).json({
                     success: false,
                     message: 'Order has Not Started Yet'
@@ -435,14 +596,18 @@ const changeOrderStatus = async (req,res) => {
             }
 
             gotOrder.orderStatus = orderStatus;
-            await Orders.findByIdAndUpdate(id ,{ $set : gotOrder }  , {new: true} )
+            await Orders.findByIdAndUpdate(id, {
+                $set: gotOrder
+            }, {
+                new: true
+            })
 
             return res.status(201).json({
                 success: true,
-                message : "Order Status Changed"
+                message: "Order Status Changed"
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr in changeOrderStatus and error  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -454,16 +619,19 @@ const changeOrderStatus = async (req,res) => {
 }
 
 // Order Completed By driver
-const orderCompletedByDriver = async (req,res) => {
-    const {id , driverId} = req.params;
+const orderCompletedByDriver = async (req, res) => {
+    const {
+        id,
+        driverId
+    } = req.params;
 
-     // checking if sent files are of image type or not
-     if (!req.file) {
+    // checking if sent files are of image type or not
+    if (!req.file) {
         return res.json({
             success: false,
             message: "Reaching Reciept is necessary for order completion"
         });
-     }
+    }
 
     // checking if sent files are of image type or not
     if (req.file) {
@@ -481,7 +649,7 @@ const orderCompletedByDriver = async (req,res) => {
             success: false,
             message: 'Please Provide All Required Credientials'
         })
-    }else{
+    } else {
         try {
             let gotDriver = await Drivers.findById(driverId);
             if (!gotDriver) {
@@ -491,7 +659,10 @@ const orderCompletedByDriver = async (req,res) => {
                 })
             }
 
-            const gotOrder = await Orders.findOne({_id : id , recieverId : driverId});
+            const gotOrder = await Orders.findOne({
+                _id: id,
+                recieverId: driverId
+            });
             if (!gotOrder) {
                 return res.status(404).json({
                     success: false,
@@ -499,14 +670,14 @@ const orderCompletedByDriver = async (req,res) => {
                 })
             }
 
-            if (gotOrder.orderStatus == "Completed"){
+            if (gotOrder.orderStatus == "Completed") {
                 return res.status(404).json({
                     success: false,
                     message: 'order has already been completed'
                 })
             }
 
-            if(gotOrder.status === false){
+            if (gotOrder.status === false) {
                 return res.status(201).json({
                     success: false,
                     message: 'Order has Not Started Yet'
@@ -519,17 +690,30 @@ const orderCompletedByDriver = async (req,res) => {
             }
             gotOrder.confrimOrderReachedByDriver = true;
             gotOrder.orderStatus = "Completed";
-            await Orders.findByIdAndUpdate(id ,{ $set : gotOrder }  , {new: true} )
+            await Orders.findByIdAndUpdate(id, {
+                $set: gotOrder
+            }, {
+                new: true
+            })
 
             // pushing into driver's completed orders array
-            await Drivers.findByIdAndUpdate(driverId ,{ $pull : {pendingOrders : id } , $push : {completedOrders : id} }  , {new: true} )
+            await Drivers.findByIdAndUpdate(driverId, {
+                $pull: {
+                    pendingOrders: id
+                },
+                $push: {
+                    completedOrders: id
+                }
+            }, {
+                new: true
+            })
 
             return res.status(201).json({
                 success: true,
-                message : "Order has been Reached SuccessFully"
+                message: "Order has been Reached SuccessFully"
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr in orderCompletedByDriver and error  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -541,15 +725,17 @@ const orderCompletedByDriver = async (req,res) => {
 }
 
 // getting all orders of a customer
-const getAllOrdersOfCustomer = async (req,res) => {
-    const {id} = req.params;
+const getAllOrdersOfCustomer = async (req, res) => {
+    const {
+        id
+    } = req.params;
 
     if (!id) {
         return res.status(201).json({
             success: false,
             message: 'Order Id Not Found'
         })
-    }else{
+    } else {
         try {
             let responses = await Orders.aggregate([{
                     $match: {
@@ -558,14 +744,14 @@ const getAllOrdersOfCustomer = async (req,res) => {
                 },
                 {
                     $project: {
-                        id : "$_id",
+                        id: "$_id",
                         orderId: "$orderId",
                         orderStatus: "$orderStatus",
                         timeAlloted: "$timeAlloted",
                         priceOfOrder: "$priceOfOrder",
                         pickUpAddress: "$pickUpAddress",
                         dropAddress: "$dropAddress",
-                        _id : 0
+                        _id: 0
                     }
                 }
             ]).sort({
@@ -577,7 +763,7 @@ const getAllOrdersOfCustomer = async (req,res) => {
                 responses,
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -589,15 +775,18 @@ const getAllOrdersOfCustomer = async (req,res) => {
 }
 
 // getting Single order of a customer
-const getSingleOrderOfCustomer = async (req,res) => {
-    const {id , postedBy } = req.params;
+const getSingleOrderOfCustomer = async (req, res) => {
+    const {
+        id,
+        postedBy
+    } = req.params;
 
     if (!id) {
         return res.status(201).json({
             success: false,
             message: 'Order Id Not Found'
         })
-    }else{
+    } else {
         try {
             let responses = await Orders.aggregate([{
                     $match: {
@@ -617,7 +806,7 @@ const getSingleOrderOfCustomer = async (req,res) => {
                 },
                 {
                     $project: {
-                        id : "$_id",
+                        id: "$_id",
                         DriverName: "$recieverId.name",
                         ratingOfDriver: "$recieverId.rating",
                         DriverPhoto: "$recieverId.profilePic",
@@ -628,7 +817,7 @@ const getSingleOrderOfCustomer = async (req,res) => {
                         dropAddress: "$dropAddress",
                         customerNotes: "$customerNotes",
                         orderStatus: "$orderStatus",
-                        _id : 0
+                        _id: 0
                     }
                 }
             ]).sort({
@@ -640,7 +829,7 @@ const getSingleOrderOfCustomer = async (req,res) => {
                 responses,
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -703,15 +892,18 @@ const getSingleOrderforDriver = async (req, res) => {
 }
 
 //  delete any order by customer
-const deleteSingeleOrder = async (req,res) => {
-    const {id , postedBy} = req.params;
+const deleteSingeleOrder = async (req, res) => {
+    const {
+        id,
+        postedBy
+    } = req.params;
 
     if (!id || !postedBy) {
         return res.status(403).json({
             success: false,
             message: 'Please Provide All Required Credientials'
         })
-    }else{
+    } else {
         try {
             let gotCustomer = await Customers.findById(postedBy);
             if (!gotCustomer) {
@@ -721,7 +913,10 @@ const deleteSingeleOrder = async (req,res) => {
                 })
             }
 
-            const gotOrder = await Orders.findOne({_id : id , postedBy : postedBy});
+            const gotOrder = await Orders.findOne({
+                _id: id,
+                postedBy: postedBy
+            });
             if (!gotOrder) {
                 return res.status(404).json({
                     success: false,
@@ -740,10 +935,10 @@ const deleteSingeleOrder = async (req,res) => {
 
             return res.status(201).json({
                 success: true,
-                message : "Order Deleted SuccessFully"
+                message: "Order Deleted SuccessFully"
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr in deleteSingeleOrder and error  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -754,17 +949,22 @@ const deleteSingeleOrder = async (req,res) => {
 
 }
 
-//  delete any order by Driver
-const deleteSingeleOrderByDriver = async (req,res) => {
-    const {id , recievedBy} = req.params;
-    const {msg} = req.body;
+//  cancelling any order by Driver
+const deleteSingeleOrderByDriver = async (req, res) => {
+    const {
+        id,
+        recievedBy
+    } = req.params;
+    const {
+        msg
+    } = req.body;
 
     if (!id || !recievedBy) {
         return res.status(403).json({
             success: false,
             message: 'Please Provide All Required Credientials'
         })
-    }else{
+    } else {
         try {
             let gotDriver = await Drivers.findById(recievedBy);
             if (!gotDriver) {
@@ -774,7 +974,10 @@ const deleteSingeleOrderByDriver = async (req,res) => {
                 })
             }
 
-            const gotOrder = await Orders.findOne({_id : id , recievedBy : recievedBy});
+            const gotOrder = await Orders.findOne({
+                _id: id,
+                recievedBy: recievedBy
+            });
             if (!gotOrder) {
                 return res.status(404).json({
                     success: false,
@@ -786,11 +989,23 @@ const deleteSingeleOrderByDriver = async (req,res) => {
                 gotOrder.orderStatus = "Cancelled By Driver";
                 gotOrder.ordercancelledByDriver = true;
                 gotOrder.orderCancelReason = msg;
+                // updataing order
+                await Orders.findByIdAndUpdate(id, {
+                    $set: gotOrder
+                }, {
+                    new: true
+                })
 
-                await Orders.findByIdAndUpdate(id ,{ $set : gotOrder }  , {new: true} )
+                // adding rejected order count to driver model
+                gotDriver.ordersRejected += 1;
+                await Drivers.findByIdAndUpdate(recievedBy, {
+                    $set: gotDriver
+                }, {
+                    new: true
+                })
                 return res.status(201).json({
                     success: true,
-                    message : "Order Cancelled SuccessFully"
+                    message: "Order Cancelled SuccessFully"
                 })
             }
 
@@ -799,7 +1014,7 @@ const deleteSingeleOrderByDriver = async (req,res) => {
                 message: 'Order has been Started and Now can not be Deleted Untill It Reaches its Destination.'
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr in deleteSingeleOrder and error  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -811,16 +1026,21 @@ const deleteSingeleOrderByDriver = async (req,res) => {
 }
 
 //  delete any order by merchent
-const cancelOrderByMerchent = async (req,res) => {
-    const {id , postedBy} = req.params;
-    const {msg} = req.body;
+const cancelOrderByMerchent = async (req, res) => {
+    const {
+        id,
+        postedBy
+    } = req.params;
+    const {
+        msg
+    } = req.body;
 
     if (!id || !postedBy) {
         return res.status(403).json({
             success: false,
             message: 'Please Provide All Required Credientials'
         })
-    }else{
+    } else {
         try {
             let gotCust = await Customers.findById(postedBy);
             if (!gotCust) {
@@ -830,7 +1050,10 @@ const cancelOrderByMerchent = async (req,res) => {
                 })
             }
 
-            const gotOrder = await Orders.findOne({_id : id , postedBy : postedBy});
+            const gotOrder = await Orders.findOne({
+                _id: id,
+                postedBy: postedBy
+            });
             if (!gotOrder) {
                 return res.status(404).json({
                     success: false,
@@ -843,10 +1066,14 @@ const cancelOrderByMerchent = async (req,res) => {
                 gotOrder.ordercancelledByCustomer = true;
                 gotOrder.orderCancelReason = msg;
 
-                await Orders.findByIdAndUpdate(id ,{ $set : gotOrder }  , {new: true} )
+                await Orders.findByIdAndUpdate(id, {
+                    $set: gotOrder
+                }, {
+                    new: true
+                })
                 return res.status(201).json({
                     success: true,
-                    message : "Order Cancelled SuccessFully"
+                    message: "Order Cancelled SuccessFully"
                 })
             }
 
@@ -855,7 +1082,7 @@ const cancelOrderByMerchent = async (req,res) => {
                 message: 'Order has been Started and Now can not be Deleted Untill It Reaches its Destination.'
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr in deleteSingeleOrder and error  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -867,32 +1094,38 @@ const cancelOrderByMerchent = async (req,res) => {
 }
 
 // getting all Pending orders of a deriver
-const getAllPendingOrdersOfDriver = async (req,res) => {
-    const {id} = req.params;
+const getAllPendingOrdersOfDriver = async (req, res) => {
+    const {
+        id
+    } = req.params;
 
     if (!id) {
         return res.status(201).json({
             success: false,
             message: 'Order Id Not Found'
         })
-    }else{
+    } else {
         try {
             let responses = await Orders.aggregate([{
                     $match: {
                         recieverId: mongoose.Types.ObjectId(id),
-                        $or : [ {orderStatus : "Pending"} , {orderStatus : "Collected"}]
+                        $or: [{
+                            orderStatus: "Pending"
+                        }, {
+                            orderStatus: "Collected"
+                        }]
                     },
                 },
                 {
                     $project: {
-                        id : "$_id",
+                        id: "$_id",
                         orderId: "$orderId",
                         orderStatus: "$orderStatus",
                         timeAlloted: "$timeAlloted",
                         priceOfOrder: "$priceOfOrder",
                         pickUpAddress: "$pickUpAddress",
                         dropAddress: "$dropAddress",
-                        _id : 0
+                        _id: 0
                     }
                 }
             ]).sort({
@@ -904,7 +1137,7 @@ const getAllPendingOrdersOfDriver = async (req,res) => {
                 responses,
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -916,32 +1149,34 @@ const getAllPendingOrdersOfDriver = async (req,res) => {
 }
 
 // getting all completes orders of a deriver
-const getAllCompletedOrdersOfDriver = async (req,res) => {
-    const {id} = req.params;
+const getAllCompletedOrdersOfDriver = async (req, res) => {
+    const {
+        id
+    } = req.params;
 
     if (!id) {
         return res.status(201).json({
             success: false,
             message: 'Order Id Not Found'
         })
-    }else{
+    } else {
         try {
             let responses = await Orders.aggregate([{
                     $match: {
                         recieverId: mongoose.Types.ObjectId(id),
-                        orderStatus : "Completed"
+                        orderStatus: "Completed"
                     },
                 },
                 {
                     $project: {
-                        id : "$_id",
+                        id: "$_id",
                         orderId: "$orderId",
                         orderStatus: "$orderStatus",
                         timeAlloted: "$timeAlloted",
                         priceOfOrder: "$priceOfOrder",
                         pickUpAddress: "$pickUpAddress",
                         dropAddress: "$dropAddress",
-                        _id : 0
+                        _id: 0
                     }
                 }
             ]).sort({
@@ -953,7 +1188,7 @@ const getAllCompletedOrdersOfDriver = async (req,res) => {
                 responses,
             })
 
-        }catch (e) {
+        } catch (e) {
             console.log("Errr  is : ", e.message);
             return res.status(201).json({
                 success: false,
@@ -964,15 +1199,24 @@ const getAllCompletedOrdersOfDriver = async (req,res) => {
 
 }
 
-
 // Stripe Payments
-const makeStripePayment = async (req,res) => {
-    const { id, cardNumber, expMM, expYY, cvv , email , name} = req.body;
+const makeStripePayment = async (req, res) => {
+    const {
+        id,
+        cardNumber,
+        expMM,
+        expYY,
+        cvv,
+        email,
+        name
+    } = req.body;
     //console.log("In Stripe : ", id, cardNumber, expMM, expYY, cvv , email , name )
 
     let gotOrder = await Orders.findById(id);
     if (!gotOrder) {
-        return res.json({message: 'Order Does Not Exists'});
+        return res.json({
+            message: 'Order Does Not Exists'
+        });
     }
 
     const createdUser = await stripe.customers.create({
@@ -981,17 +1225,24 @@ const makeStripePayment = async (req,res) => {
     })
 
     //console.log("createdUser", createdUser)
-    if (createdUser)
-    {
+    if (createdUser) {
         try {
-            const token = await stripe.tokens.create({ card: {
-                number: cardNumber, exp_month: expMM, exp_year: expYY, cvc: cvv } })
-           //console.log("token : ", token)
-            const AddingCardToUser = await stripe.customers.createSource(createdUser.id, { source: token.id })
+            const token = await stripe.tokens.create({
+                card: {
+                    number: cardNumber,
+                    exp_month: expMM,
+                    exp_year: expYY,
+                    cvc: cvv
+                }
+            })
+            //console.log("token : ", token)
+            const AddingCardToUser = await stripe.customers.createSource(createdUser.id, {
+                source: token.id
+            })
             //console.log("AddingCardToUser : ", AddingCardToUser)
             let amtCharged = Math.round(gotOrder.priceOfOrder);
             //console.log("gotOrder.finalAm", gotOrder.finalAmt  , "New Amount : ", amtCharged)
-           const charge = await stripe.charges.create({
+            const charge = await stripe.charges.create({
                 amount: amtCharged * 100,
                 description: 'Tracakza Trading Services Order Charges',
                 currency: 'USD',
@@ -1002,17 +1253,32 @@ const makeStripePayment = async (req,res) => {
             // const invoice = await stripe.invoices.sendInvoice(charge.id);
             // console.log("invoice", invoice)
             let driver = await Drivers.findById(gotOrder.recieverId);
-            let drieverAmount = ( priceOfOrder - 25 ) * 100;
+            let drieverAmount = (priceOfOrder - 25) * 100;
             let adminAmt = priceOfOrder - drieverAmount;
             driver.availCash = drieverAmount;
-            await Drivers.findByIdAndUpdate(gotOrder.recieverId ,{ $set:  { ...driver} } , {new: true} )
+            await Drivers.findByIdAndUpdate(gotOrder.recieverId, {
+                $set: {
+                    ...driver
+                }
+            }, {
+                new: true
+            })
 
             gotOrder.paymentStatus = true;
             gotOrder.driverGotAmt = drieverAmount;
             gotOrder.adminAmt = adminAmt;
-            await Orders.findByIdAndUpdate(id ,{ $set:  { ...gotOrder} } , {new: true} )
+            await Orders.findByIdAndUpdate(id, {
+                $set: {
+                    ...gotOrder
+                }
+            }, {
+                new: true
+            })
             console.log("going to return")
-            return res.json({success: true , message : "Payment Charged Successfully"});
+            return res.json({
+                success: true,
+                message: "Payment Charged Successfully"
+            });
         } catch (error) {
             switch (error.type) {
                 case 'StripeCardError':
@@ -1046,42 +1312,354 @@ const makeStripePayment = async (req,res) => {
     }
 }
 
-// calculate and add final amounts
-const calacFinalAmt = async (id) => {
+// Thawani Payments
+const makeThawaniPayments = async (req, res) => {
+    const {
+        id
+    } = req.params;
+    if (!id) {
+        return res.status(404).json({
+            success: false,
+            message: 'Id of Order is Reqiured'
+        })
+    } else {
+        let checkOrder = await Orders.findOne({
+            orderId: id
+        })
+        if (!checkOrder) {
+            return res.status(404).json({
+                success: false,
+                message: 'Id of Order is In Correct'
+            })
+        }
+
+        const merchent = await Customers.findById(checkOrder.postedBy)
+        console.log("email : ", merchent.firstname)
+        try {
+            // creating customer
+            let customer_token = null;
+            const response = await api.customer.create(merchent.firstname);
+            customer_token = response.data.id;
+            //console.log("customer_token : ", customer_token)
+
+            // creating session
+            let new_session = null;
+            const payload = {
+                client_reference_id: "2021293168",
+                products: [{
+                    name: "Service Charges for Oturq Trading App",
+                    unit_amount: checkOrder.priceOfOrder,
+                    quantity: 1,
+                }, ],
+                success_url: "https://www.linkedin.com/company/mexatechub/?originalSubdomain=pk",
+                cancel_url: "http://mtechub.com/",
+                metadata: {
+                    customer: merchent.firstname,
+                    order_id: 10,
+                },
+            };
+            const sess = await api.session.create(payload);
+            new_session = sess.data.session_id;
+            //console.log("new_session Id : ", new_session)
+
+            // getting session token
+            const sessionToken = await api.session.findSessionByID(new_session);
+            //console.log("sessionToken : ", sessionToken)
+
+            // redirecting to payment gateway
+            const expected_redirect = api.redirect(new_session);
+            const toBe_redirect =
+                "https://uatcheckout.thawani.om" +
+                "/pay/" +
+                new_session +
+                "?key=" +
+                process.env.Thawani_Secret;
+
+            console.log("expected_redirect : ", expected_redirect)
+            console.log("toBe_redirect : ", toBe_redirect)
+
+
+            // gtting all sessions
+            const allSessions = await api.session.findAll();
+            //console.log("allSessions : ", allSessions)
+
+            res.status(200).json({
+                success: true,
+                ReDirectLink: expected_redirect,
+                message: "Please Click on This Link to Make Payments."
+            })
+
+        } catch (e) {
+            res.status(200).json({
+                success: false,
+                message: "Some Thawani  Error"
+            })
+        }
+
+    }
+}
+
+// calculate and add final amounts to driver and admin
+const calacFinalAmt = async (req, res) => {
+    const {
+        id
+    } = req.params
     try {
-        const gotOrder = await Orders.findById(id);
+        let gotOrder = await Orders.findById(id);
         if (!gotOrder) {
-            return 'Order Does Not Exists'
-        }else{
-            if (gotOrder.ordercancelledByCustomer === true) {
-                    let aw = await orderCancelledByCust(id);
-                    if (aw !== "Done") {
-                        return ' error Occured while cancelling order from Customer '
-                    }
-                } else if (gotOrder.ordercancelledByDriver === true) {
-                    let ww =  await orderCancelledByDriver(id);
-                    if (ww !== "Done") {
-                        return  ' error Occured while cancelling order from Driver '
-                    }
-                }else{
-                    let admnAndDriverAmt = await calcAdminAmt(id);
-                        if (admnAndDriverAmt !== "Done") {
-                            return '!!! error Occured while calculating admin amount !!!'
-                        }
-
-                        let adminAmt = await addAmtToAdmin(id);
-                        if (adminAmt !== "Done") {
-                            return '!!! error Occured while adding amount to Admin !!!'
-                        }
-
-                        let driverAmt = await addDriverAmt(id);
-                        if (driverAmt !== "Done") {
-                            return '!!! error Occured while adding amount to driver !!!'
-                        }
+            return res.status(500).json({
+                success: false,
+                message: 'Order Does Not Exists'
+            })
+        } else {
+            if ((gotOrder.ordercancelledByDriver === true) || (gotOrder.ordercancelledByCustomer === true)) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Order Amount for Amdin and Driver Can Not Be Calculated as Order Has Been Cancelled Before It Started.'
+                })
+            } else {
+                // checking if order is completed or not
+                if (gotOrder.orderStatus !== "Completed") {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Payments Can Not be Made before Order gets Completed'
+                    })
                 }
+
+                // checking if payment has been already made or not
+                if ((gotOrder.driverGotAmt !== 0) && (gotOrder.adminAmt !== 0)) {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Admin and Driver Amount have Already been Made.'
+                    })
+                }
+
+                let gotDriver = await Drivers.findById(gotOrder.recieverId)
+                let drievrAmt = ((gotOrder.priceOfOrder * 75) / 100);
+                let adminAmt = gotOrder.priceOfOrder - drievrAmt;
+
+                // calculating driver amount
+                gotOrder.driverGotAmt = drievrAmt;
+                gotOrder.adminAmt = adminAmt;
+                //updating order
+                await Orders.findByIdAndUpdate(id, {
+                    $set: {
+                        ...gotOrder
+                    }
+                }, {
+                    new: true
+                })
+
+                // adding amount to driver account
+                gotDriver.ordersDelivered += 1;
+                gotDriver.sales += 1;
+                gotDriver.availCash += Number(drievrAmt);
+                await Drivers.findByIdAndUpdate(gotOrder.recieverId, {
+                    $set: {
+                        ...gotDriver
+                    }
+                }, {
+                    new: true
+                })
+
+                // updating admin
+                let admin = await Admins.findOne({
+                    email: process.env.My_Admin
+                })
+                admin.availCash += Number(adminAmt)
+                await Admins.findOneAndUpdate({
+                    email: process.env.My_Admin
+                }, {
+                    $set: {
+                        ...admin
+                    }
+                }, {
+                    new: true
+                })
+
+                return res.status(200).json({
+                    success: true,
+                    message: "Payments Added to Amdin and Diver Account SuccessFully"
+                })
             }
+        }
     } catch (error) {
-        console.log("Error in deductAmtfromCust and error is : ", error)
+        console.log("Error in calacFinalAmt and error is : ", error)
+        return res.status(500).json({
+            success: false,
+        })
+    }
+}
+
+// adding tip to driver
+const addTipAmount = async (req, res) => {
+    const {
+        id
+    } = req.params
+    const {
+        tipAmt
+    } = req.body;
+    if (!tipAmt || !id) {
+        return res.status(500).json({
+            success: false,
+            message: 'Please Provide All Required Credientials'
+        })
+    }
+    try {
+        let gotOrder = await Orders.findById(id);
+        if (!gotOrder) {
+            return res.status(500).json({
+                success: false,
+                message: 'Order Does Not Exists'
+            })
+        } else {
+            if ((gotOrder.ordercancelledByDriver === true) || (gotOrder.ordercancelledByCustomer === true)) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Tip Can Not be Added as Order Has Been Cancelled Before It Started.'
+                })
+            } else {
+                // checking if order is completed or not
+                if (gotOrder.orderStatus !== "Completed") {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Tip Can Not be Added before Order gets Completed'
+                    })
+                }
+
+                // checking if payment has been already made or not
+                if (gotOrder.tipAmt !== 0) {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'You have Already Given Tip for this Order, Now No More Tip Can be Added'
+                    })
+                }
+
+                let gotDriver = await Drivers.findById(gotOrder.recieverId)
+                gotDriver.availCash += Number(tipAmt);
+                // adding tip amount
+                await Drivers.findByIdAndUpdate(gotOrder.recieverId, {
+                    $set: {
+                        ...gotDriver
+                    }
+                }, {
+                    new: true
+                })
+
+                //updating order
+                gotOrder.tipAmt = tipAmt;
+                await Orders.findByIdAndUpdate(id, {
+                    $set: {
+                        ...gotOrder
+                    }
+                }, {
+                    new: true
+                })
+
+                return res.status(200).json({
+                    success: true,
+                    message: "Tip Added to Diver Account SuccessFully"
+                })
+            }
+        }
+    } catch (error) {
+        console.log("Error in addTipAmount and error is : ", error)
+        return res.status(500).json({
+            success: false,
+        })
+    }
+}
+
+// adding review to order
+const reviewOfOrder = async (req, res) => {
+    const {
+        id,
+        postedBy
+    } = req.params
+    const {
+        rating
+    } = req.body;
+    if (!rating || !id) {
+        return res.status(500).json({
+            success: false,
+            message: 'Please Provide All Required Credientials'
+        })
+    }
+    try {
+        let gotOrder = await Orders.findOne({
+            _id: id,
+            postedBy: postedBy
+        });
+        if (!gotOrder) {
+            return res.status(500).json({
+                success: false,
+                message: 'Order Does Not Exists'
+            })
+        } else {
+            if ((gotOrder.ordercancelledByDriver === true) || (gotOrder.ordercancelledByCustomer === true)) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Review Can Not be Added as Order Has Been Cancelled Before It Started.'
+                })
+            } else {
+                // checking if order is completed or not
+                if (gotOrder.orderStatus !== "Completed") {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Review Can Not be Added before Order gets Completed'
+                    })
+                }
+
+                // checking if payment has been already made or not
+                if (gotOrder.reviewOfOrder !== 0) {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'You have Already Given Review for this Order, Now No More Tip Can be Added'
+                    })
+                }
+
+                let gotDriver = await Drivers.findById(gotOrder.recieverId)
+                let length = gotDriver.completedOrders.length;
+                console.log("length : ", length)
+                if (length < 1) {
+                    gotDriver.rating = 0;
+                    gotDriver.rating = rating;
+                } else {
+                    gotDriver.rating = 0;
+                    gotDriver.rating = ((Number(gotDriver.rating) + Number(rating)) / length);
+                    console.log("availReview : ", gotDriver.rating, "rating : ", rating, "length : ", length)
+                }
+
+                // adding review to driver
+                await Drivers.findByIdAndUpdate(gotOrder.recieverId, {
+                    $set: {
+                        ...gotDriver
+                    }
+                }, {
+                    new: true
+                })
+
+                //updating order
+                gotOrder.reviewOfOrder = rating;
+                await Orders.findByIdAndUpdate(id, {
+                    $set: {
+                        ...gotOrder
+                    }
+                }, {
+                    new: true
+                })
+
+                return res.status(200).json({
+                    success: true,
+                    message: "Review Added to Diver Account and Order SuccessFully"
+                })
+            }
+        }
+    } catch (error) {
+        console.log("Error in reviewOfOrder and error is : ", error)
+        return res.status(500).json({
+            success: false,
+        })
     }
 }
 
@@ -1121,4 +1699,9 @@ module.exports = {
     orderCollctedByDriver,
     deleteSingeleOrderByDriver,
     cancelOrderByMerchent,
+    calacFinalAmt,
+    addTipAmount,
+    reviewOfOrder,
+    makeThawaniPayments,
+    addOrderImages,
 }
